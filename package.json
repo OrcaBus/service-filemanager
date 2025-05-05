@@ -1,0 +1,45 @@
+{
+  "name": "template-service-base",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "tsc && jest",
+    "cdk": "cdk",
+    "cdk-stateless": "cdk -c deployMode=stateless",
+    "cdk-stateful": "cdk -c deployMode=stateful",
+    "prepare": "pre-commit install",
+    "prettier": "prettier --check .",
+    "prettier-fix": "prettier --write .",
+    "lint": "eslint .",
+    "lint-fix": "eslint --fix ."
+  },
+  "keywords": [],
+  "author": {
+    "name": "University of Melbourne Centre for Cancer Research",
+    "organization": true
+  },
+  "license": "MIT",
+  "packageManager": "pnpm@10.8.0",
+  "devDependencies": {
+    "@eslint/js": "^9.23.0",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.13.13",
+    "aws-cdk": "^2.1006.0",
+    "cdk-nag": "^2.35.56",
+    "eslint": "^9.23.0",
+    "globals": "^16.0.0",
+    "jest": "^29.7.0",
+    "prettier": "^3.5.3",
+    "test-js": "^0.0.4",
+    "ts-jest": "^29.3.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.28.0"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.185.0",
+    "constructs": "^10.4.2",
+    "@orcabus/platform-cdk-constructs": "0.0.6"
+  }
+}

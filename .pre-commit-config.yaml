@@ -1,0 +1,35 @@
+repos:
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        exclude: ^(pnpm-lock.yaml)
+      - id: check-yaml
+      - id: detect-aws-credentials
+        args: [ --allow-missing-credentials ]
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: no-commit-to-branch
+        args: [ --branch, main, --branch, master, --pattern, release/.* ]
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ["--baseline", ".secrets.baseline"]
+        exclude: pnpm-lock.yaml
+
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v9.17.0
+    hooks:
+      - id: eslint
+        exclude: ^(pnpm-lock.yaml)
+
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier Format
+        entry: pnpm prettier
+        language: system

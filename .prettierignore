@@ -1,0 +1,25 @@
+# See https://prettier.io/docs/en/ignore.html
+
+# Ignore artifacts:
+build/
+coverage/
+
+# Ignore all HTML files:
+*.html
+
+.pre-commit-config.yaml
+pnpm-lock.yaml
+
+README.md
+
+cdk.out/
+cdk.json
+cdk.context.json
+
+
+tsconfig.json
+
+config/event_schemas/
+
+# Ignore all files under `.venv`
+.venv/

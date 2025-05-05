@@ -1,0 +1,123 @@
+name: Pull Request Tests
+
+on:
+  pull_request:
+    paths-ignore:
+      # The ignore only works only if changes to the main branch only include the following files.
+      # So if the commit only contain .md changes but the PR change contain more, the ignore fails
+      # https://github.com/actions/runner/issues/2324#issuecomment-1703345084
+      - '**.md'
+      - '**.svg'
+      - '**.drawio'
+      - '**.png'
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+    branches:
+      - main
+
+permissions: read-all
+
+# Actions Used (please keep this documented here as added)
+#  https://github.com/marketplace/actions/checkout
+#  https://github.com/marketplace/actions/setup-python
+#  https://github.com/marketplace/actions/trufflehog-oss
+#  https://github.com/marketplace/actions/checkout
+#  https://github.com/marketplace/actions/cache
+#  https://github.com/actions-rust-lang/setup-rust-toolchain
+
+jobs:
+  pre-commit-lint-security:
+    runs-on: ubuntu-latest
+    if: ${{ !github.event.pull_request.draft }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'pnpm'
+
+      - run: corepack enable
+
+      - name: Print toolchain versions
+        run: |
+          node -v
+          python3 -V
+          pip3 -V
+          make --version
+
+      # TODO see whether we can leverage https://github.com/pre-commit/action
+      - name: Install system-wide tools dependencies
+        run: |
+          pip3 install pre-commit detect-secrets black ggshield
+
+      - name: TruffleHog OSS
+        uses: trufflesecurity/trufflehog@v3.34.0
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --debug --only-verified
+
+      - name: Install dependencies
+        run: |
+          make install
+
+      - name: Lint and code formatting
+        run: |
+          make check
+
+  test-iac:
+    runs-on: ubuntu-22.04-arm
+    if: ${{ !github.event.pull_request.draft }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'pnpm'
+
+      - run: corepack enable
+
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - run: pnpm test
+
+  test-app:
+    runs-on: ubuntu-22.04-arm
+    if: ${{ !github.event.pull_request.draft }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Print toolchain versions
+        run: |
+          node -v
+          python -V
+          pip3 -V
+          make --version
+
+      - name: Install
+        working-directory: ./app
+        run: |
+          make install
+
+      - name: Install
+        working-directory: ./app
+        run: |
+          make test

@@ -1,0 +1,17 @@
+[package]
+name = "filemanager-api-lambda"
+description = "This crate is a lambda function which runs the filemanager api endpoints"
+version = "0.1.0"
+license.workspace = true
+edition.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+tokio = { version = "1", features = ["macros"] }
+tracing = { version = "0.1" }
+axum = "0.8"
+
+lambda_http = "0.13"
+
+filemanager = { path = "../filemanager" }

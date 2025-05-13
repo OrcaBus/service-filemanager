@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+
+members = [
+    "filemanager",
+    "filemanager-api-server",
+    "filemanager-build",
+    "filemanager-api-lambda",
+    "filemanager-ingest-lambda",
+    "filemanager-inventory-lambda",
+    "filemanager-migrate-lambda"
+]
+
+[workspace.package]
+license = "MIT"
+edition = "2021"
+authors = ["Marko Malenic <mmalenic1@gmail.com>", "Roman Valls Guimera <brainstorm@nopcode.org>"]
+rust-version = "1.83"

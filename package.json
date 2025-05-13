@@ -39,6 +39,7 @@
   },
   "dependencies": {
     "aws-cdk-lib": "^2.185.0",
+    "cargo-lambda-cdk": "^0.0.33",
     "constructs": "^10.4.2",
     "@orcabus/platform-cdk-constructs": "0.0.6"
   }

@@ -15,3 +15,15 @@ install:
 
 test:
 	@pnpm test
+
+check-all: check
+	@(cd app && $(MAKE) check)
+
+fix-all: fix
+	@(cd app && $(MAKE) fix)
+
+install-all: install
+	@(cd app && $(MAKE) install)
+
+test-all: test
+	@(cd app && $(MAKE) test)

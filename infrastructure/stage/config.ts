@@ -3,67 +3,34 @@ import {
   accessKeySecretArn,
   computeSecurityGroupName,
   databasePort,
-  dataSharingCacheBucket,
   dbClusterEndpointHostParameterName,
   eventSourceQueueName,
-  externalProjectBuckets,
+  fileManagerBuckets,
+  fileManagerCacheBuckets,
   fileManagerIngestRoleName,
-  fileManagerInventoryBucket,
   fileManagerPresignUser,
   fileManagerPresignUserSecret,
-  icav2ArchiveAnalysisBucket,
-  icav2ArchiveFastqBucket,
-  icav2PipelineCacheBucket,
-  ntsmBucket,
-  oncoanalyserBucket,
   vpcProps,
 } from './constants';
 import { StageName } from '@orcabus/platform-cdk-constructs/utils';
 import { getDefaultApiGatewayConfiguration } from '@orcabus/platform-cdk-constructs/api-gateway';
 import { FileManagerStatefulConfig } from './filemanager-stateful-stack';
-import { Function } from './constructs/function';
+import { Function } from './functions/function';
 import { EventSourceProps } from '../components/event-source';
 
-export const fileManagerBuckets = (stage: StageName): string[] => {
-  const eventSourceBuckets = [oncoanalyserBucket[stage], icav2PipelineCacheBucket[stage]];
-  // Note, that we only archive production data, so we only need access to the archive buckets in prod.
-  if (stage == 'PROD') {
-    eventSourceBuckets.push(icav2ArchiveAnalysisBucket[stage]);
-    eventSourceBuckets.push(icav2ArchiveFastqBucket[stage]);
-  }
-  eventSourceBuckets.push(ntsmBucket[stage]);
-  eventSourceBuckets.push(dataSharingCacheBucket[stage]);
-
-  /* Extend the event source buckets with the external project buckets */
-  for (const bucket of externalProjectBuckets[stage]) {
-    eventSourceBuckets.push(bucket);
-  }
-
-  return eventSourceBuckets;
-};
-
-export const fileManagerInventoryBuckets = (stage: StageName): string[] => {
-  const inventorySourceBuckets = [];
-  if (stage == 'BETA') {
-    inventorySourceBuckets.push(fileManagerInventoryBucket[stage]);
-  }
-  return inventorySourceBuckets;
-};
-
 export const getFileManagerStatelessProps = (stage: StageName): FileManagerStatelessConfig => {
-  const inventorySourceBuckets = fileManagerInventoryBuckets(stage);
-  const eventSourceBuckets = fileManagerBuckets(stage);
+  const buckets = [...fileManagerBuckets[stage], ...fileManagerCacheBuckets[stage]];
 
   return {
     securityGroupName: computeSecurityGroupName,
     vpcProps,
-    eventSourceQueueName: eventSourceQueueName,
+    eventSourceQueueName,
     databaseClusterEndpointHostParameter: dbClusterEndpointHostParameterName,
     port: databasePort,
     migrateDatabase: true,
     accessKeySecretArn: accessKeySecretArn[stage],
-    inventorySourceBuckets,
-    eventSourceBuckets,
+    inventorySourceBuckets: buckets,
+    eventSourceBuckets: buckets,
     fileManagerRoleName: fileManagerIngestRoleName,
     apiGatewayCognitoProps: {
       ...getDefaultApiGatewayConfiguration(stage),
@@ -112,52 +79,23 @@ export const getEventSourceConstructProps = (stage: StageName): EventSourceProps
     'Object Access Tier Changed',
   ];
 
-  const props = {
+  const props: EventSourceProps = {
     queueName: eventSourceQueueName,
     maxReceiveCount: 3,
-    rules: [
-      {
-        bucket: oncoanalyserBucket[stage],
-        eventTypes,
-        patterns: eventSourcePattern(),
-      },
-      {
-        bucket: icav2PipelineCacheBucket[stage],
-        eventTypes,
-        patterns: eventSourcePatternCache(),
-      },
-    ],
+    rules: [],
   };
 
-  if (stage === 'PROD') {
+  for (const bucket of fileManagerCacheBuckets[stage]) {
     props.rules.push({
-      bucket: icav2ArchiveAnalysisBucket[stage],
+      bucket,
       eventTypes,
-      patterns: eventSourcePattern(),
-    });
-    props.rules.push({
-      bucket: icav2ArchiveFastqBucket[stage],
-      eventTypes,
-      patterns: eventSourcePattern(),
+      patterns: eventSourcePatternCache(),
     });
   }
 
-  // Add the ntsm bucket rule
-  props.rules.push({
-    bucket: ntsmBucket[stage],
-    eventTypes,
-    patterns: eventSourcePattern(),
-  });
-
-  props.rules.push({
-    bucket: dataSharingCacheBucket[stage],
-    eventTypes,
-    patterns: eventSourcePattern(),
-  });
-
-  for (const bucket of externalProjectBuckets[stage]) {
+  for (const bucket of fileManagerBuckets[stage]) {
     props.rules.push({
-      bucket: bucket,
+      bucket,
       eventTypes,
       patterns: eventSourcePattern(),
     });
@@ -167,19 +105,12 @@ export const getEventSourceConstructProps = (stage: StageName): EventSourceProps
 };
 
 export const getFileManagerStatefulProps = (stage: StageName): FileManagerStatefulConfig => {
-  const inventorySourceBuckets = fileManagerInventoryBuckets(stage);
-  const eventSourceBuckets = fileManagerBuckets(stage);
-
+  const buckets = [...fileManagerBuckets[stage], ...fileManagerCacheBuckets[stage]];
   return {
     accessKeyProps: {
       userName: fileManagerPresignUser,
       secretName: fileManagerPresignUserSecret,
-      policies: Function.formatPoliciesForBucket(
-        // Only need read only access to the buckets. The filemanager will only use this access key for pre-signing URLs.
-        // All regular actions will use the role.
-        [...eventSourceBuckets, ...inventorySourceBuckets],
-        [...Function.getObjectActions()]
-      ),
+      policies: Function.formatPoliciesForBucket(buckets, [...Function.getObjectActions()]),
     },
     eventSourceProps: getEventSourceConstructProps(stage),
   };

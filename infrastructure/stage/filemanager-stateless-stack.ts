@@ -1,8 +1,8 @@
 import { Construct } from 'constructs';
-import { IngestFunction } from './constructs/ingest';
-import { MigrateFunction } from './constructs/migrate';
-import { ApiFunction } from './constructs/api';
-import { DatabaseProps } from './constructs/function';
+import { IngestFunction } from './functions/ingest';
+import { MigrateFunction } from './functions/migrate';
+import { ApiFunction } from './functions/api';
+import { DatabaseProps } from './functions/function';
 import { Vpc, SecurityGroup, VpcLookupOptions, IVpc, ISecurityGroup } from 'aws-cdk-lib/aws-ec2';
 import { Arn, Duration, Stack, StackProps } from 'aws-cdk-lib';
 import { StringParameter } from 'aws-cdk-lib/aws-ssm';
@@ -14,7 +14,7 @@ import {
   HttpRouteKey,
 } from 'aws-cdk-lib/aws-apigatewayv2';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
-import { InventoryFunction } from './constructs/inventory';
+import { InventoryFunction } from './functions/inventory';
 import { Role } from 'aws-cdk-lib/aws-iam';
 import { NagSuppressions } from 'cdk-nag';
 import {

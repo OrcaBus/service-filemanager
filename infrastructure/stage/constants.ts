@@ -6,58 +6,32 @@ import {
   PROD_ENVIRONMENT,
 } from '@orcabus/platform-cdk-constructs/deployment-stack-pipeline';
 
-export const oncoanalyserBucket: Record<StageName, string> = {
-  ['BETA']: 'umccr-temp-dev',
-  ['GAMMA']: 'umccr-temp-stg',
-  ['PROD']: 'org.umccr.data.oncoanalyser',
-};
-
-export const icav2PipelineCacheBucket: Record<StageName, string> = {
-  ['BETA']: 'pipeline-dev-cache-503977275616-ap-southeast-2',
-  ['GAMMA']: 'pipeline-stg-cache-503977275616-ap-southeast-2',
-  ['PROD']: 'pipeline-prod-cache-503977275616-ap-southeast-2',
-};
-
-// The archive bucket. Noting that this is only present for prod data.
-export const icav2ArchiveAnalysisBucket: Record<'PROD', string> = {
-  ['PROD']: 'archive-prod-analysis-503977275616-ap-southeast-2',
-};
-
-// The fastq bucket. Noting that this is only present for prod data.
-export const icav2ArchiveFastqBucket: Record<'PROD', string> = {
-  ['PROD']: 'archive-prod-fastq-503977275616-ap-southeast-2',
-};
-
-export const ntsmBucket: Record<StageName, string> = {
-  ['BETA']: `ntsm-fingerprints-${BETA_ENVIRONMENT.account}-ap-southeast-2`,
-  ['GAMMA']: `ntsm-fingerprints-${GAMMA_ENVIRONMENT.account}-ap-southeast-2`,
-  ['PROD']: `ntsm-fingerprints-${PROD_ENVIRONMENT.account}-ap-southeast-2`,
-};
-
-/*
-Data sharing - need this in constants since the bucket will be read by the filemanager
-*/
-export const dataSharingCacheBucket: Record<StageName, string> = {
-  ['BETA']: `data-sharing-artifacts-${BETA_ENVIRONMENT.account}-ap-southeast-2`,
-  ['GAMMA']: `data-sharing-artifacts-${GAMMA_ENVIRONMENT.account}-ap-southeast-2`,
-  ['PROD']: `data-sharing-artifacts-${PROD_ENVIRONMENT.account}-ap-southeast-2`,
-};
-
-/*
- External Projects
-*/
-export const externalProjectBuckets: Record<StageName, string[]> = {
-  ['BETA']: [],
-  ['GAMMA']: [],
+export const fileManagerBuckets: Record<StageName, string[]> = {
+  ['BETA']: [
+    'umccr-temp-dev',
+    `ntsm-fingerprints-${BETA_ENVIRONMENT.account}-ap-southeast-2`,
+    `data-sharing-artifacts-${BETA_ENVIRONMENT.account}-ap-southeast-2`,
+    'filemanager-inventory-test',
+  ],
+  ['GAMMA']: [
+    'umccr-temp-stg',
+    `ntsm-fingerprints-${GAMMA_ENVIRONMENT.account}-ap-southeast-2`,
+    `data-sharing-artifacts-${GAMMA_ENVIRONMENT.account}-ap-southeast-2`,
+  ],
   ['PROD']: [
-    // Project Montauk
+    'org.umccr.data.oncoanalyser',
+    'archive-prod-analysis-503977275616-ap-southeast-2',
+    'archive-prod-fastq-503977275616-ap-southeast-2',
+    `ntsm-fingerprints-${PROD_ENVIRONMENT.account}-ap-southeast-2`,
+    `data-sharing-artifacts-${PROD_ENVIRONMENT.account}-ap-southeast-2`,
     'pipeline-montauk-977251586657-ap-southeast-2',
   ],
 };
 
-// The test inventory bucket for dev.
-export const fileManagerInventoryBucket: Record<'BETA', string> = {
-  ['BETA']: 'filemanager-inventory-test',
+export const fileManagerCacheBuckets: Record<StageName, string[]> = {
+  ['BETA']: ['pipeline-dev-cache-503977275616-ap-southeast-2'],
+  ['GAMMA']: ['pipeline-stg-cache-503977275616-ap-southeast-2'],
+  ['PROD']: ['pipeline-prod-cache-503977275616-ap-southeast-2'],
 };
 
 // Db Construct

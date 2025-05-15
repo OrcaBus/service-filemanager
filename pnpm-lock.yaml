@@ -10,13 +10,13 @@ importers:
     dependencies:
       '@orcabus/platform-cdk-constructs':
         specifier: 0.0.6
-        version: 0.0.6(aws-cdk-lib@2.188.0(constructs@10.4.2))(constructs@10.4.2)
+        version: 0.0.6(aws-cdk-lib@2.195.0(constructs@10.4.2))(constructs@10.4.2)
       aws-cdk-lib:
-        specifier: ^2.185.0
-        version: 2.188.0(constructs@10.4.2)
+        specifier: ^2.195.0
+        version: 2.195.0(constructs@10.4.2)
       cargo-lambda-cdk:
         specifier: ^0.0.33
-        version: 0.0.33(aws-cdk-lib@2.188.0(constructs@10.4.2))(constructs@10.4.2)
+        version: 0.0.33(aws-cdk-lib@2.195.0(constructs@10.4.2))(constructs@10.4.2)
       constructs:
         specifier: ^10.4.2
         version: 10.4.2
@@ -38,7 +38,7 @@ importers:
         version: 2.1007.0
       cdk-nag:
         specifier: ^2.35.97
-        version: 2.35.97(aws-cdk-lib@2.188.0(constructs@10.4.2))(constructs@10.4.2)
+        version: 2.35.97(aws-cdk-lib@2.195.0(constructs@10.4.2))(constructs@10.4.2)
       eslint:
         specifier: ^9.23.0
         version: 9.24.0
@@ -873,8 +873,8 @@ packages:
   async@3.2.6:
     resolution: {integrity: sha512-htCUDlxyyCLMgaM3xXg0C0LW2xqfuQ6p05pCEIsXuyQ+a1koYKTuBMzRNwmybfLgvJDMd0r1LTn4+E0Ti6C2AA==}
 
-  aws-cdk-lib@2.188.0:
-    resolution: {integrity: sha512-RiAkyKHUYcpI59IXP6VP1NvO0Ph5vlqIsrz6YE8KPuGfQ0LuE5ob4Ta2ibVs/fvaGyJIZkEPw54hDrytVWrk3g==}
+  aws-cdk-lib@2.195.0:
+    resolution: {integrity: sha512-AYLysgSjSnSjkal/AmR86DqvOVqy0VjeWmXR+ucIIGSOzJsevsYuNWCeVnf4v9x+vd2ysVcO8fXndG426vGZ/w==}
     engines: {node: '>= 14.15.0'}
     peerDependencies:
       constructs: ^10.0.0
@@ -2837,9 +2837,9 @@ snapshots:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.19.1
 
-  '@orcabus/platform-cdk-constructs@0.0.6(aws-cdk-lib@2.188.0(constructs@10.4.2))(constructs@10.4.2)':
+  '@orcabus/platform-cdk-constructs@0.0.6(aws-cdk-lib@2.195.0(constructs@10.4.2))(constructs@10.4.2)':
     dependencies:
-      aws-cdk-lib: 2.188.0(constructs@10.4.2)
+      aws-cdk-lib: 2.195.0(constructs@10.4.2)
       constructs: 10.4.2
 
   '@sinclair/typebox@0.27.8': {}
@@ -3305,7 +3305,7 @@ snapshots:
 
   async@3.2.6: {}
 
-  aws-cdk-lib@2.188.0(constructs@10.4.2):
+  aws-cdk-lib@2.195.0(constructs@10.4.2):
     dependencies:
       '@aws-cdk/asset-awscli-v1': 2.2.231
       '@aws-cdk/asset-node-proxy-agent-v6': 2.1.0
@@ -3413,14 +3413,14 @@ snapshots:
 
   caniuse-lite@1.0.30001712: {}
 
-  cargo-lambda-cdk@0.0.33(aws-cdk-lib@2.188.0(constructs@10.4.2))(constructs@10.4.2):
+  cargo-lambda-cdk@0.0.33(aws-cdk-lib@2.195.0(constructs@10.4.2))(constructs@10.4.2):
     dependencies:
-      aws-cdk-lib: 2.188.0(constructs@10.4.2)
+      aws-cdk-lib: 2.195.0(constructs@10.4.2)
       constructs: 10.4.2
 
-  cdk-nag@2.35.97(aws-cdk-lib@2.188.0(constructs@10.4.2))(constructs@10.4.2):
+  cdk-nag@2.35.97(aws-cdk-lib@2.195.0(constructs@10.4.2))(constructs@10.4.2):
     dependencies:
-      aws-cdk-lib: 2.188.0(constructs@10.4.2)
+      aws-cdk-lib: 2.195.0(constructs@10.4.2)
       constructs: 10.4.2
 
   chalk@4.1.2:

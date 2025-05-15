@@ -47,10 +47,9 @@ jobs:
 
       - run: corepack enable
 
-      # TODO see whether we can leverage https://github.com/pre-commit/action
       - name: Install system-wide tools dependencies
         run: |
-          pip3 install pre-commit detect-secrets black ggshield
+          pip3 install pre-commit detect-secrets
 
       - name: TruffleHog OSS
         uses: trufflesecurity/trufflehog@v3.34.0
@@ -72,6 +71,14 @@ jobs:
     runs-on: ubuntu-22.04-arm
     if: ${{ !github.event.pull_request.draft }}
     steps:
+      - name: Cache
+        uses: mozilla-actions/sccache-action@v0.0.8
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
@@ -92,19 +99,16 @@ jobs:
     # Do not run this step on the template.yaml service base repository as a Makefile is not yet defined.
     if: ${{ !github.event.pull_request.draft && github.repository != 'OrcaBus/template.yaml-service-base' }}
     steps:
+      - name: Cache
+        uses: mozilla-actions/sccache-action@v0.0.8
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Print toolchain versions
-        run: |
-          node -v
-          python -V
-          pip3 -V
-          make --version
 
       - name: Install
         working-directory: ./app

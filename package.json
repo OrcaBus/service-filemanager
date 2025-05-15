@@ -39,7 +39,7 @@
     "@aws-sdk/client-eventbridge": "^3.758.0"
   },
   "dependencies": {
-    "aws-cdk-lib": "^2.185.0",
+    "aws-cdk-lib": "^2.195.0",
     "cargo-lambda-cdk": "^0.0.33",
     "constructs": "^10.4.2",
     "@orcabus/platform-cdk-constructs": "0.0.6"

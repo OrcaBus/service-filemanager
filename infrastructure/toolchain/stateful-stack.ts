@@ -2,7 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { DeploymentStackPipeline } from '@orcabus/platform-cdk-constructs/deployment-stack-pipeline';
 import { getFileManagerStatefulProps } from '../stage/config';
-import { FileManagerStateful } from '../stage/filemanager-stateful-stack';
+import { FileManagerStatefulStack } from '../stage/filemanager-stateful-stack';
 
 export class StatefulStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -11,8 +11,8 @@ export class StatefulStack extends cdk.Stack {
     new DeploymentStackPipeline(this, 'DeploymentPipeline', {
       githubBranch: 'initialize',
       githubRepo: 'service-filemanager',
-      stack: FileManagerStateful,
-      stackName: 'FileManagerStateful',
+      stack: FileManagerStatefulStack,
+      stackName: 'FileManagerStatefulStack',
       stackConfig: {
         beta: getFileManagerStatefulProps('BETA'),
         gamma: getFileManagerStatefulProps('GAMMA'),

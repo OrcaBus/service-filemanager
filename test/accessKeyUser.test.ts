@@ -5,11 +5,11 @@ import {
   fileManagerPresignUser,
   fileManagerPresignUserSecret,
 } from '../infrastructure/stage/constants';
-import { FileManagerStateful } from '../infrastructure/stage/filemanager-stateful-stack';
+import { FileManagerStatefulStack } from '../infrastructure/stage/filemanager-stateful-stack';
 
 const app = new cdk.App();
 
-const stack = new FileManagerStateful(app, 'TestAccessKeySecret', {
+const stack = new FileManagerStatefulStack(app, 'TestAccessKeySecret', {
   env: {
     account: '123456789',
     region: 'ap-southeast-2',

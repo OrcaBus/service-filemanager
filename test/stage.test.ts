@@ -1,12 +1,12 @@
 import { App, Aspects, Stack } from 'aws-cdk-lib';
 import { Annotations, Match } from 'aws-cdk-lib/assertions';
 import { AwsSolutionsChecks, NagSuppressions } from 'cdk-nag';
-import { FileManagerStateless } from '../infrastructure/stage/filemanager-stateless-stack';
+import { FileManagerStatelessStack } from '../infrastructure/stage/filemanager-stateless-stack';
 import {
   getFileManagerStatefulProps,
   getFileManagerStatelessProps,
 } from '../infrastructure/stage/config';
-import { FileManagerStateful } from '../infrastructure/stage/filemanager-stateful-stack';
+import { FileManagerStatefulStack } from '../infrastructure/stage/filemanager-stateful-stack';
 import { synthesisMessageToString } from './utils';
 
 function applyIAMWildcardSuppression(stack: Stack) {
@@ -125,13 +125,17 @@ function cdkNagStack(stack: Stack, applySuppressions: (stack: Stack) => void) {
 describe('cdk-nag-stateless-toolchain-stack', () => {
   const app = new App();
 
-  const filemanagerStatelessStack = new FileManagerStateless(app, 'FileManagerStatelessStack', {
-    ...getFileManagerStatelessProps('PROD'),
-    env: {
-      account: '123456789',
-      region: 'ap-southeast-2',
-    },
-  });
+  const filemanagerStatelessStack = new FileManagerStatelessStack(
+    app,
+    'FileManagerStatelessStack',
+    {
+      ...getFileManagerStatelessProps('PROD'),
+      env: {
+        account: '123456789',
+        region: 'ap-southeast-2',
+      },
+    }
+  );
 
   cdkNagStack(filemanagerStatelessStack, applyStatelessNagSuppressions);
 });
@@ -139,7 +143,7 @@ describe('cdk-nag-stateless-toolchain-stack', () => {
 describe('cdk-nag-stateful-toolchain-stack', () => {
   const app = new App({});
 
-  const fileManagerStatefulStack = new FileManagerStateful(app, 'FileManagerStatefulStack', {
+  const fileManagerStatefulStack = new FileManagerStatefulStack(app, 'FileManagerStatefulStack', {
     ...getFileManagerStatefulProps('PROD'),
     env: {
       account: '123456789',

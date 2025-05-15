@@ -89,8 +89,8 @@ jobs:
 
   test-app:
     runs-on: ubuntu-22.04-arm
-    # Do not run this step on the template service base repository as a Makefile is not yet defined.
-    if: ${{ !github.event.pull_request.draft && github.repository != 'OrcaBus/template-service-base' }}
+    # Do not run this step on the template.yaml service base repository as a Makefile is not yet defined.
+    if: ${{ !github.event.pull_request.draft && github.repository != 'OrcaBus/template.yaml-service-base' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

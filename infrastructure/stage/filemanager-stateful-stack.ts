@@ -25,7 +25,7 @@ export type FileManagerStatefulProps = StackProps & FileManagerStatefulConfig;
 /**
  * Construct used to configure the filemanager.
  */
-export class FileManagerStateful extends Stack {
+export class FileManagerStatefulStack extends Stack {
   readonly accessKeySecret: AccessKeySecret;
 
   constructor(scope: Construct, id: string, props: StackProps & FileManagerStatefulProps) {

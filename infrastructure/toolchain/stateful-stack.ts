@@ -1,7 +1,7 @@
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { DeploymentStackPipeline } from '@orcabus/platform-cdk-constructs/deployment-stack-pipeline';
-import { getFileManagerStatelessProps } from '../stage/config';
+import { getFileManagerStatefulProps } from '../stage/config';
 import { FileManagerStateful } from '../stage/filemanager-stateful-stack';
 
 export class StatefulStack extends cdk.Stack {
@@ -14,9 +14,9 @@ export class StatefulStack extends cdk.Stack {
       stack: FileManagerStateful,
       stackName: 'DeployStack',
       stackConfig: {
-        beta: getFileManagerStatelessProps('BETA'),
-        gamma: getFileManagerStatelessProps('GAMMA'),
-        prod: getFileManagerStatelessProps('PROD'),
+        beta: getFileManagerStatefulProps('BETA'),
+        gamma: getFileManagerStatefulProps('GAMMA'),
+        prod: getFileManagerStatefulProps('PROD'),
       },
       pipelineName: 'OrcaBus-StatefulMicroservice',
       cdkSynthCmd: ['pnpm install --frozen-lockfile --ignore-scripts', 'pnpm cdk-stateful synth'],

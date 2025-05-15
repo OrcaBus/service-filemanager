@@ -24,9 +24,6 @@ import {
 import { NamedLambdaRole } from '../components/named-lambda-role';
 import { ProviderFunction } from '../components/provider-function';
 
-export const FILEMANAGER_SERVICE_NAME = 'filemanager';
-export const FILEMANAGER_INGEST_ID_TAG_NAME = 'umccr-org:OrcaBusFileManagerIngestId';
-
 /**
  * Stateful config for filemanager.
  */

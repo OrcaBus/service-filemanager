@@ -1,6 +1,5 @@
 import { App, Aspects, Stack } from 'aws-cdk-lib';
 import { Annotations, Match } from 'aws-cdk-lib/assertions';
-import { SynthesisMessage } from 'aws-cdk-lib/cx-api';
 import { AwsSolutionsChecks, NagSuppressions } from 'cdk-nag';
 import { FileManagerStateless } from '../infrastructure/stage/filemanager-stateless-stack';
 import {
@@ -8,26 +7,105 @@ import {
   getFileManagerStatelessProps,
 } from '../infrastructure/stage/config';
 import { FileManagerStateful } from '../infrastructure/stage/filemanager-stateful-stack';
+import { synthesisMessageToString } from './utils';
 
-/**
- * apply nag suppression
- * @param stack
- */
-function applyNagSuppression(stack: Stack) {
-  NagSuppressions.addStackSuppressions(
+function applyIAMWildcardSuppression(stack: Stack) {
+  NagSuppressions.addResourceSuppressions(
     stack,
-    [{ id: 'AwsSolutions-S10', reason: 'not require requests to use SSL' }],
+    [
+      {
+        id: 'AwsSolutions-IAM5',
+        reason: "'*' is required to access objects in the indexed bucket by filemanager",
+        appliesTo: [
+          'Resource::arn:aws:s3:::org.umccr.data.oncoanalyser/*',
+          'Resource::arn:aws:s3:::archive-prod-analysis-503977275616-ap-southeast-2/*',
+          'Resource::arn:aws:s3:::archive-prod-fastq-503977275616-ap-southeast-2/*',
+          'Resource::arn:aws:s3:::ntsm-fingerprints-472057503814-ap-southeast-2/*',
+          'Resource::arn:aws:s3:::data-sharing-artifacts-472057503814-ap-southeast-2/*',
+          'Resource::arn:aws:s3:::pipeline-montauk-977251586657-ap-southeast-2/*',
+          'Resource::arn:aws:s3:::pipeline-prod-cache-503977275616-ap-southeast-2/*',
+        ],
+      },
+    ],
     true
   );
 }
 
-function synthesisMessageToString(sm: SynthesisMessage): string {
-  return `${sm.entry.data} [${sm.id}]`;
+/**
+ * Apply nag suppression for the stateless stack
+ * @param stack
+ */
+function applyStatelessNagSuppressions(stack: Stack) {
+  applyIAMWildcardSuppression(stack);
+
+  NagSuppressions.addStackSuppressions(
+    stack,
+    [{ id: 'AwsSolutions-IAM4', reason: 'allow AWS managed policy' }],
+    true
+  );
+  NagSuppressions.addResourceSuppressionsByPath(
+    stack,
+    '/FileManagerStatelessStack/GetSchemaHttpRoute/Resource',
+    [
+      {
+        id: 'AwsSolutions-APIG4',
+        reason: 'we have the default Cognito UserPool authorizer',
+      },
+    ],
+    true
+  );
+  NagSuppressions.addResourceSuppressionsByPath(
+    stack,
+    `/FileManagerStatelessStack/MigrateProviderFunction/Provider/framework-onEvent/ServiceRole/DefaultPolicy/Resource`,
+    [
+      {
+        id: 'AwsSolutions-IAM5',
+        reason:
+          'the provider function needs to be able to invoke the configured function. It uses' +
+          "`lambda.Function.grantInvoke` to achieve this which contains a '*'",
+      },
+    ],
+    false
+  );
+  NagSuppressions.addResourceSuppressionsByPath(
+    stack,
+    '/FileManagerStatelessStack/MigrateProviderFunction/Provider/framework-onEvent/Resource',
+    [
+      {
+        id: 'AwsSolutions-L1',
+        reason: 'the provider function is controlled by CDK and has an outdated runtime',
+      },
+    ],
+    false
+  );
 }
 
-function cdkNagStack(stack: Stack) {
+/**
+ * Apply nag suppression for the stateless stack
+ * @param stack
+ */
+function applyStatefulNagSuppressions(stack: Stack) {
+  applyIAMWildcardSuppression(stack);
+
+  NagSuppressions.addResourceSuppressionsByPath(
+    stack,
+    '/FileManagerStatefulStack/AccessKey/Secret/Resource',
+    [
+      {
+        id: 'AwsSolutions-SMG4',
+        reason: 'secret rotation is an upcoming feature',
+      },
+    ],
+    false
+  );
+}
+
+/**
+ * Run the CDK nag checks.
+ */
+function cdkNagStack(stack: Stack, applySuppressions: (stack: Stack) => void) {
   Aspects.of(stack).add(new AwsSolutionsChecks());
-  applyNagSuppression(stack);
+  applySuppressions(stack);
 
   test(`cdk-nag AwsSolutions Pack errors`, () => {
     const errors = Annotations.fromStack(stack)
@@ -45,21 +123,29 @@ function cdkNagStack(stack: Stack) {
 }
 
 describe('cdk-nag-stateless-toolchain-stack', () => {
-  const app = new App({});
+  const app = new App();
 
   const filemanagerStatelessStack = new FileManagerStateless(app, 'FileManagerStatelessStack', {
     ...getFileManagerStatelessProps('PROD'),
+    env: {
+      account: '123456789',
+      region: 'ap-southeast-2',
+    },
   });
 
-  cdkNagStack(filemanagerStatelessStack);
+  cdkNagStack(filemanagerStatelessStack, applyStatelessNagSuppressions);
 });
 
 describe('cdk-nag-stateful-toolchain-stack', () => {
   const app = new App({});
 
-  const fileManagerStatefulStack = new FileManagerStateful(app, 'FileManagerStatelessStack', {
+  const fileManagerStatefulStack = new FileManagerStateful(app, 'FileManagerStatefulStack', {
     ...getFileManagerStatefulProps('PROD'),
+    env: {
+      account: '123456789',
+      region: 'ap-southeast-2',
+    },
   });
 
-  cdkNagStack(fileManagerStatefulStack);
+  cdkNagStack(fileManagerStatefulStack, applyStatefulNagSuppressions);
 });

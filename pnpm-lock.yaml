@@ -37,8 +37,8 @@ importers:
         specifier: ^2.1006.0
         version: 2.1007.0
       cdk-nag:
-        specifier: ^2.35.56
-        version: 2.35.66(aws-cdk-lib@2.188.0(constructs@10.4.2))(constructs@10.4.2)
+        specifier: ^2.35.97
+        version: 2.35.97(aws-cdk-lib@2.188.0(constructs@10.4.2))(constructs@10.4.2)
       eslint:
         specifier: ^9.23.0
         version: 9.24.0
@@ -975,8 +975,8 @@ packages:
     bundledDependencies:
       - js-toml
 
-  cdk-nag@2.35.66:
-    resolution: {integrity: sha512-Z2kAsyxTssospTi3dBU/psi3KaAwfkZEaAfaTeHc825JO3o7hkyJc+dbcPax99c6ckJUUzktf8n1XiSKlJd4qA==}
+  cdk-nag@2.35.97:
+    resolution: {integrity: sha512-excEVCZtBM2LrXDwQmPh/ARVZghrYeXBjUxmGCZIvmTPRI1tfkvCbu9X87YrLXwZE6POZwcb/X2hWuGOV40cdg==}
     peerDependencies:
       aws-cdk-lib: ^2.156.0
       constructs: ^10.0.5
@@ -3418,7 +3418,7 @@ snapshots:
       aws-cdk-lib: 2.188.0(constructs@10.4.2)
       constructs: 10.4.2
 
-  cdk-nag@2.35.66(aws-cdk-lib@2.188.0(constructs@10.4.2))(constructs@10.4.2):
+  cdk-nag@2.35.97(aws-cdk-lib@2.188.0(constructs@10.4.2))(constructs@10.4.2):
     dependencies:
       aws-cdk-lib: 2.188.0(constructs@10.4.2)
       constructs: 10.4.2

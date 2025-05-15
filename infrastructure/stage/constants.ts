@@ -73,3 +73,6 @@ validateSecretName(fileManagerPresignUserSecret);
 export const fileManagerPresignUser = 'orcabus-file-manager-presign-user'; // pragma: allowlist secret
 
 export const rdsPolicyName = 'orcabus-rds-connect-filemanager';
+
+export const FILEMANAGER_SERVICE_NAME = 'filemanager';
+export const FILEMANAGER_INGEST_ID_TAG_NAME = 'umccr-org:OrcaBusFileManagerIngestId';

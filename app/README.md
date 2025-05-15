@@ -1,7 +1,5 @@
 # Filemanager
 
-The filemanager ingests events from cloud storage like S3 and maintains a queryable table of objects.
-
 This project is split up into multiple crates in a workspace. For development, docker is used, which enables a postgres database, the rest of the stack is developed against an AWS account.
 
 ## Prerequisites

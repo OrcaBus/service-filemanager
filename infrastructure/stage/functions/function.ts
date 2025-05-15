@@ -5,9 +5,9 @@ import { Architecture, Version } from 'aws-cdk-lib/aws-lambda';
 import { ManagedPolicy, PolicyStatement, Role } from 'aws-cdk-lib/aws-iam';
 import { RustFunction } from 'cargo-lambda-cdk';
 import path from 'path';
-import { rdsPolicyName } from '../constants';
-import { FILEMANAGER_SERVICE_NAME } from '../filemanager-stateless-stack';
+import { FILEMANAGER_SERVICE_NAME, rdsPolicyName } from '../constants';
 import { NamedLambdaRole } from '../../components/named-lambda-role';
+import { spawnSync } from 'node:child_process';
 
 /**
  * Properties for the database.
@@ -97,7 +97,13 @@ export class Function extends Construct {
       description: 'Security group that allows a filemanager Lambda function to egress out.',
     });
 
-    const manifestPath = path.join(__dirname, '..', '..', '..');
+    const manifestPath = path.join(__dirname, '..', '..', '..', 'app');
+    const defaultTarget = spawnSync('rustc', ['--version', '--verbose'])
+      .stdout.toString()
+      .split(/\r?\n/)
+      .find((line) => line.startsWith('host:'))
+      ?.replace('host:', '')
+      .trim();
     this._function = new RustFunction(this, 'RustFunction', {
       manifestPath: manifestPath,
       binaryName: props.package,
@@ -105,7 +111,9 @@ export class Function extends Construct {
         environment: {
           ...props.buildEnvironment,
         },
-        ...(process.arch == 'arm64' && { cargoLambdaFlags: ['--compiler', 'cargo'] }),
+        ...(defaultTarget === 'aarch64-unknown-linux-gnu' && {
+          cargoLambdaFlags: ['--compiler', 'cargo'],
+        }),
         dockerOptions: {
           network: 'host',
         },

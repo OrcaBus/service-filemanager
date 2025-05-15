@@ -3,7 +3,7 @@ import * as fn from './function';
 import { DatabaseProps } from './function';
 import { BucketProps } from './ingest';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
-import { FILEMANAGER_INGEST_ID_TAG_NAME } from '../filemanager-stateless-stack';
+import { FILEMANAGER_INGEST_ID_TAG_NAME } from '../constants';
 
 /**
  * Props for the API function.

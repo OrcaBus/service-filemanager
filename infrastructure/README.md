@@ -1,12 +1,12 @@
 # CDK constructs for filemanager
 
-This folder contains CDK constructs for filemanager which is used by the outer project
+This folder contains CDK constructs for filemanager which is used by the project
 to instantiate and deploy filemanager.
 
 ## Overview
 
 The primary component that is deployed in filemanager is Lambda functions for each of the lambda
-crates within this project. This, alongside the shared database in Orcabus allows the filemanager
+crates within this project. This, alongside the shared database in OrcaBus allows the filemanager
 to perform file ingestion, querying, etc.
 
 ### Inputs
@@ -19,13 +19,14 @@ fetch additional object data such as storage classes.
 
 The filemanager expects a dedicated database within the shared database cluster, which it can use to store data.
 Initially, the filemanager-migrate-lambda function is deployed to perform database table migrations using the
-provider_function.ts construct. Then, the other Lambda functions are deployed normally within the filemanager
+provider function construct. Then, the other Lambda functions are deployed normally within the filemanager
 construct.
 
 ### Building
 
-Note, the `RustFunction` compiles code using `cargo-lambda` running inside a Docker container, and produces a Lambda
-function which runs natively on AWS (i.e. not a dockerized Lambda function). This makes it simpler for consumers of
-the Filemanager CDK to build the project. There is a small downside in that the compiled code is stored under a
-`target-cdk-docker-bundling` directory which is owned by Docker, so there may be some permission issues if trying to
-clean this directory.
+Note, the `RustFunction` compiles code using [`cargo-lambda`][cargo-lambda] locally if it is installed, otherwise it compiles
+code inside a docker function. The compiled code is then used by CDK to run the Lambda function natively (i.e.
+this only does a docker build, not docker-based runtime). For compilation speeds, it's recommended to use local
+compilation if possible.
+
+[cargo-lambda]: https://www.cargo-lambda.info/

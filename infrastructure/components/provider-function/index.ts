@@ -52,6 +52,7 @@ export class ProviderFunction extends Construct {
       vpc: props.vpc,
       vpcSubnets: { subnetType: SubnetType.PRIVATE_WITH_EGRESS },
     });
+
     const customResource = new CustomResource(this, 'CustomResource', {
       serviceToken: provider.serviceToken,
       properties: props.resourceProperties,

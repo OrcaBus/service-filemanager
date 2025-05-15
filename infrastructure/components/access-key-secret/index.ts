@@ -1,4 +1,4 @@
-import { SecretValue, StackProps } from 'aws-cdk-lib';
+import { SecretValue } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { AccessKey, AccessKeyStatus, PolicyStatement, User } from 'aws-cdk-lib/aws-iam';
 import { ISecret, Secret } from 'aws-cdk-lib/aws-secretsmanager';

@@ -25,6 +25,8 @@ repos:
     rev: v9.26.0
     hooks:
       - id: eslint
+        files: \.[jt]sx?$
+        types: [ file ]
         exclude: pnpm-lock.yaml
 
   - repo: https://github.com/rbubley/mirrors-prettier

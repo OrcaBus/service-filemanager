@@ -9,7 +9,7 @@ import { getFileManagerStatefulProps } from '../infrastructure/stage/config';
 let stack: cdk.Stack;
 let eventbridge: EventBridge;
 
-function assert_common(template: Template) {
+function assertCommon(template: Template) {
   template.resourceCountIs('AWS::SQS::Queue', 2);
 
   template.hasResourceProperties('AWS::SQS::Queue', {
@@ -84,7 +84,7 @@ beforeEach(() => {
   eventbridge = new EventBridge();
 });
 
-async function test_directory_objects(event: any, pattern: any) {
+async function testDirectoryObjects(event: any, pattern: any) {
   event['detail']['object']['key'] = 'example-key/';
   event['detail']['object']['size'] = 0;
   expect(await testEventPattern(event, pattern)).toBe(false);
@@ -110,7 +110,25 @@ async function test_directory_objects(event: any, pattern: any) {
   expect(await testEventPattern(event, pattern)).toBe(true);
 }
 
-test.only('Test event source event patterns', async () => {
+async function testCacheObjects(event: any, pattern: any) {
+  event['detail']['object']['key'] = 'byob-icav2/123/cache/123';
+  event['detail']['object']['size'] = 0;
+  expect(await testEventPattern(event, pattern)).toBe(false);
+
+  event['detail']['object']['key'] = 'byob-icav2/123/cache/123/';
+  event['detail']['object']['size'] = 0;
+  expect(await testEventPattern(event, pattern)).toBe(false);
+
+  event['detail']['object']['key'] = 'byob-icav2/123/cache/123';
+  event['detail']['object']['size'] = 1;
+  expect(await testEventPattern(event, pattern)).toBe(false);
+
+  event['detail']['object']['key'] = 'byob-icav2/123/cache/123/';
+  event['detail']['object']['size'] = 1;
+  expect(await testEventPattern(event, pattern)).toBe(false);
+}
+
+test('Test event source event patterns', async () => {
   new EventSourceConstruct(
     stack,
     'TestEventSourceConstruct',
@@ -118,51 +136,17 @@ test.only('Test event source event patterns', async () => {
   );
 
   const template = Template.fromStack(stack);
-  //
-  // for (const pattern of Object.entries(template.findResources('AWS::Events::Rule'))) {
-  //   const pattern = pattern[1]['Properties']['EventPattern'];
-  // }
-  // let pattern = Object.entries(template.findResources('AWS::Events::Rule'))[0][1]['Properties'][
-  //   'EventPattern'
-  // ];
-  //
-  //
-  // let event = testS3Event(oncoanalyserBucket[AppStage.PROD], 'example-key', 1);
-  // await test_directory_objects(event, pattern);
-  //
-  // pattern = Object.entries(template.findResources('AWS::Events::Rule'))[1][1]['Properties'][
-  //   'EventPattern'
-  // ];
-  // event = testS3Event(icav2PipelineCacheBucket[AppStage.PROD], 'example-key', 1);
-  // await test_directory_objects(event, pattern);
-  // // The cache bucket should additionally ignore cache objects.
-  // event['detail']['object']['key'] = 'byob-icav2/123/cache/123';
-  // event['detail']['object']['size'] = 0;
-  // expect(await testEventPattern(event, pattern)).toBe(false);
-  //
-  // event['detail']['object']['key'] = 'byob-icav2/123/cache/123/';
-  // event['detail']['object']['size'] = 0;
-  // expect(await testEventPattern(event, pattern)).toBe(false);
-  //
-  // event['detail']['object']['key'] = 'byob-icav2/123/cache/123';
-  // event['detail']['object']['size'] = 1;
-  // expect(await testEventPattern(event, pattern)).toBe(false);
-  //
-  // event['detail']['object']['key'] = 'byob-icav2/123/cache/123/';
-  // event['detail']['object']['size'] = 1;
-  // expect(await testEventPattern(event, pattern)).toBe(false);
-  //
-  // pattern = Object.entries(template.findResources('AWS::Events::Rule'))[2][1]['Properties'][
-  //   'EventPattern'
-  // ];
-  // event = testS3Event(icav2ArchiveAnalysisBucket[AppStage.PROD], 'example-key', 1);
-  // await test_directory_objects(event, pattern);
-  //
-  // pattern = Object.entries(template.findResources('AWS::Events::Rule'))[3][1]['Properties'][
-  //   'EventPattern'
-  // ];
-  // event = testS3Event(icav2ArchiveFastqBucket[AppStage.PROD], 'example-key', 1);
-  // await test_directory_objects(event, pattern);
+
+  for (const pattern of Object.entries(template.findResources('AWS::Events::Rule'))) {
+    const eventPattern = pattern[1]['Properties']['EventPattern'];
+    const bucket = eventPattern['detail']['bucket']['name'][0];
+    const event = testS3Event(bucket, 'example-key', 1);
+    await testDirectoryObjects(event, eventPattern);
+
+    if (JSON.stringify(eventPattern['detail']['object']).includes('cache')) {
+      await testCacheObjects(event, eventPattern);
+    }
+  }
 });
 
 test('Test EventSourceConstruct created props', () => {
@@ -177,9 +161,7 @@ test('Test EventSourceConstruct created props', () => {
   });
   const template = Template.fromStack(stack);
 
-  console.log(JSON.stringify(template, undefined, 2));
-
-  assert_common(template);
+  assertCommon(template);
 });
 
 test('Test EventSourceConstruct created props with event types', () => {
@@ -195,7 +177,7 @@ test('Test EventSourceConstruct created props with event types', () => {
   });
   const template = Template.fromStack(stack);
 
-  assert_common(template);
+  assertCommon(template);
   template.hasResourceProperties('AWS::Events::Rule', {
     EventPattern: {
       'detail-type': ['Object Created'],
@@ -216,7 +198,7 @@ test('Test EventSourceConstruct created props with key rule', () => {
   });
   const template = Template.fromStack(stack);
 
-  assert_common(template);
+  assertCommon(template);
   template.hasResourceProperties('AWS::Events::Rule', {
     EventPattern: {
       detail: {

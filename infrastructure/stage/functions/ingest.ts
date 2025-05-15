@@ -1,9 +1,8 @@
 import { Construct } from 'constructs';
 import { IQueue } from 'aws-cdk-lib/aws-sqs';
-import * as fn from './function';
 import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
-import { DatabaseProps } from './function';
-import { FILEMANAGER_INGEST_ID_TAG_NAME } from '../filemanager-stateless-stack';
+import { DatabaseProps, Function, FunctionPropsConfigurable } from './function';
+import { FILEMANAGER_INGEST_ID_TAG_NAME } from '../constants';
 
 /**
  * Props for controlling access to buckets.
@@ -29,12 +28,12 @@ export type EventSourceProps = {
 /**
  * Props for the ingest function.
  */
-export type IngestFunctionProps = fn.FunctionPropsConfigurable & DatabaseProps & EventSourceProps;
+export type IngestFunctionProps = FunctionPropsConfigurable & DatabaseProps & EventSourceProps;
 
 /**
  * A construct for the Lambda ingest function.
  */
-export class IngestFunction extends fn.Function {
+export class IngestFunction extends Function {
   constructor(scope: Construct, id: string, props: IngestFunctionProps) {
     super(scope, id, {
       package: 'filemanager-ingest-lambda',
@@ -52,9 +51,9 @@ export class IngestFunction extends fn.Function {
       this.function.addEventSource(eventSource);
     });
     this.addPoliciesForBuckets(props.buckets, [
-      ...fn.Function.getObjectActions(),
-      ...fn.Function.getObjectVersionActions(),
-      ...fn.Function.objectTaggingActions(),
+      ...Function.getObjectActions(),
+      ...Function.getObjectVersionActions(),
+      ...Function.objectTaggingActions(),
     ]);
   }
 }

@@ -14,9 +14,9 @@ import {
 } from './constants';
 import { StageName } from '@orcabus/platform-cdk-constructs/utils';
 import { getDefaultApiGatewayConfiguration } from '@orcabus/platform-cdk-constructs/api-gateway';
-import { FileManagerStatefulConfig } from './filemanager-stateful-stack';
 import { Function } from './functions/function';
 import { EventSourceProps } from '../components/event-source';
+import { FileManagerStatefulConfig } from './filemanager-stateful-stack';
 
 export const getFileManagerStatelessProps = (stage: StageName): FileManagerStatelessConfig => {
   const buckets = [...fileManagerBuckets[stage], ...fileManagerCacheBuckets[stage]];

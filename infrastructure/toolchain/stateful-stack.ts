@@ -9,16 +9,16 @@ export class StatefulStack extends cdk.Stack {
     super(scope, id, props);
 
     new DeploymentStackPipeline(this, 'DeploymentPipeline', {
-      githubBranch: 'main',
-      githubRepo: 'template-service-base',
+      githubBranch: 'initialize',
+      githubRepo: 'service-filemanager',
       stack: FileManagerStateful,
-      stackName: 'DeployStack',
+      stackName: 'FileManagerStateful',
       stackConfig: {
         beta: getFileManagerStatefulProps('BETA'),
         gamma: getFileManagerStatefulProps('GAMMA'),
         prod: getFileManagerStatefulProps('PROD'),
       },
-      pipelineName: 'OrcaBus-StatefulMicroservice',
+      pipelineName: 'OrcaBus-StatefulFileManager',
       cdkSynthCmd: ['pnpm install --frozen-lockfile --ignore-scripts', 'pnpm cdk-stateful synth'],
     });
   }

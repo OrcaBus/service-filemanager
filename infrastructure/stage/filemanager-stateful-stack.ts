@@ -6,7 +6,7 @@ import { EventSourceConstruct, EventSourceProps } from '../components/event-sour
 /**
  * Stateful config for filemanager.
  */
-interface FileManagerStatefulConfig {
+export interface FileManagerStatefulConfig {
   /**
    * Access key props.
    */

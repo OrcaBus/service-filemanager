@@ -5,7 +5,7 @@ import { Alarm, ComparisonOperator, MathExpression } from 'aws-cdk-lib/aws-cloud
 /**
  * Properties for the EventDLQConstruct.
  */
-export type EventDLQProps = {
+export interface EventDLQProps {
   /**
    * The name of the dead letter queue for the construct.
    */
@@ -14,7 +14,7 @@ export type EventDLQProps = {
    * Specify the name of the alarm.
    */
   alarmName: string;
-};
+}
 
 /**
  * A wrapper around an SQS queue that should act as a dead-letter queue.
@@ -27,7 +27,7 @@ export class EventDLQConstruct {
 
   constructor(scope: Construct, queueId: string, alarmId: string, props: EventDLQProps) {
     this.deadLetterQueue = new Queue(scope, queueId, {
-      queueName: `${props.queueName}`,
+      queueName: props.queueName,
       enforceSSL: true,
     });
 

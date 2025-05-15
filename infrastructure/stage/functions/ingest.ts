@@ -7,13 +7,13 @@ import { FILEMANAGER_INGEST_ID_TAG_NAME } from '../constants';
 /**
  * Props for controlling access to buckets.
  */
-export type BucketProps = {
+export interface BucketProps {
   /**
    * The buckets that the filemanager is expected to process. This will add policies to access the buckets via
    * 's3:List*' and 's3:Get*'.
    */
   readonly buckets: string[];
-};
+}
 
 /**
  * Props related to the filemanager event source.

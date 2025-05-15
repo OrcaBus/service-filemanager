@@ -8,7 +8,7 @@ import { EventDLQConstruct } from '../event-dlq';
 /**
  * Properties for defining an S3 EventBridge rule.
  */
-export type EventSourceRule = {
+export interface EventSourceRule {
   /**
    * Bucket to receive events from. If not specified, captures events from all buckets.
    */
@@ -24,13 +24,13 @@ export type EventSourceRule = {
   /**
    * Rules matching specified fields inside "object" in the S3 event.
    */
-  patterns?: { [key: string]: unknown };
-};
+  patterns?: Record<string, unknown>;
+}
 
 /**
  * Properties for the EventSourceConstruct.
  */
-export type EventSourceProps = {
+export interface EventSourceProps {
   /**
    * The name of the queue to construct.
    */
@@ -46,7 +46,7 @@ export type EventSourceProps = {
    * A set of EventBridge rules to define.
    */
   rules: EventSourceRule[];
-};
+}
 
 /**
  * A construct that defines an SQS S3 event source, along with a DLQ and CloudWatch alarms.
@@ -89,7 +89,7 @@ export class EventSourceConstruct extends Construct {
         },
       };
 
-      const rule = new Rule(scope, 'Rule' + cnt, {
+      const rule = new Rule(scope, 'Rule' + cnt.toString(), {
         eventPattern,
       });
       this.rules.push(rule);

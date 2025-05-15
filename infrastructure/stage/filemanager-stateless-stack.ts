@@ -75,7 +75,7 @@ export class FileManagerStateless extends Stack {
 
     this.ingestRole = this.createRole(props.fileManagerRoleName, 'IngestFunctionRole');
 
-    if (props?.migrateDatabase) {
+    if (props.migrateDatabase) {
       const migrateFunction = new MigrateFunction(this, 'MigrateFunction', {
         vpc: this.vpc,
         host: this.host,

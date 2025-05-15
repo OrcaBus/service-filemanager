@@ -8,7 +8,7 @@ import CodeProperty = CfnFunction.CodeProperty;
 /**
  * Props for the resource invoke construct.
  */
-export type ProviderFunctionProps = {
+export interface ProviderFunctionProps {
   /**
    * Vpc for the function.
    */
@@ -20,7 +20,7 @@ export type ProviderFunctionProps = {
   /**
    * Properties that get defined in the template and passed to the Lambda function via `ResourceProperties`.
    */
-  resourceProperties?: { [keys: string]: unknown };
+  resourceProperties?: Record<string, unknown>;
   /**
    * An additional hash property that can be used to determine if the custom resource should be updated. By default,
    * this is the s3Key of the Lambda code asset, which is derived from the asset hash. This is used to ensure that
@@ -28,7 +28,7 @@ export type ProviderFunctionProps = {
    * Add a constant value here to override this behaviour.
    */
   additionalHash?: string;
-};
+}
 
 /**
  * A construct for invoking a Lambda function using the CDK provider framework:

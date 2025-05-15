@@ -6,7 +6,7 @@ import { ISecret, Secret } from 'aws-cdk-lib/aws-secretsmanager';
 /**
  * Props for the user access key stack.
  */
-export type AccessKeySecretProps = {
+export interface AccessKeySecretProps {
   /**
    * Name of the secret to store the access tokens.
    */
@@ -19,7 +19,7 @@ export type AccessKeySecretProps = {
    * The policies to add to the user.
    */
   policies: PolicyStatement[];
-};
+}
 
 /**
  * This component creates long-lived user access tokens inside secrets manager. This is used to authorize actions like

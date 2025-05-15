@@ -7,7 +7,7 @@ import { TOOLCHAIN_ENVIRONMENT } from '@orcabus/platform-cdk-constructs/deployme
 
 const app = new cdk.App();
 
-const deployMode = app.node.tryGetContext('deployMode');
+const deployMode = app.node.tryGetContext('deployMode') as string | undefined;
 if (!deployMode) {
   throw new Error("deployMode is required in context ('-c deployMode=stateless')");
 }

@@ -12,7 +12,7 @@ import { spawnSync } from 'node:child_process';
 /**
  * Properties for the database.
  */
-export type DatabaseProps = {
+export interface DatabaseProps {
   /**
    * The host of the database.
    */
@@ -25,20 +25,20 @@ export type DatabaseProps = {
    * The database security group.
    */
   readonly securityGroup: ISecurityGroup;
-};
+}
 
 /**
  * Props for a Rust function which can be configured from the top-level orcabus context.
  */
-export type FunctionPropsConfigurable = {
+export interface FunctionPropsConfigurable {
   /**
    * Additional build environment variables when building the Lambda function.
    */
-  readonly buildEnvironment?: { [key: string]: string };
+  readonly buildEnvironment?: Record<string, string>;
   /**
    * Additional environment variables to set inside the Lambda function
    */
-  readonly environment?: { [key: string]: string };
+  readonly environment?: Record<string, string>;
   /**
    * RUST_LOG string, defaults to trace on local crates and info everywhere else.
    */
@@ -51,7 +51,7 @@ export type FunctionPropsConfigurable = {
    * Vpc for the function.
    */
   readonly vpc: IVpc;
-};
+}
 
 /**
  * Props for the Rust function which can be configured from the top-level orcabus context.

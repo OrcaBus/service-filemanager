@@ -1,4 +1,6 @@
-/* eslint-disable  @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/dot-notation */
 
 import * as cdk from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
@@ -132,14 +134,14 @@ test('Test event source event patterns', async () => {
   new EventSourceConstruct(
     stack,
     'TestEventSourceConstruct',
-    getFileManagerStatefulProps('PROD').eventSourceProps!
+    getFileManagerStatefulProps('PROD').eventSourceProps
   );
 
   const template = Template.fromStack(stack);
 
   for (const pattern of Object.entries(template.findResources('AWS::Events::Rule'))) {
     const eventPattern = pattern[1]['Properties']['EventPattern'];
-    const bucket = eventPattern['detail']['bucket']['name'][0];
+    const bucket = eventPattern['detail']['bucket']['name'][0] as string;
     const event = testS3Event(bucket, 'example-key', 1);
     await testDirectoryObjects(event, eventPattern);
 

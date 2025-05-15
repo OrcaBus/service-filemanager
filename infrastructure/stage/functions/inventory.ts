@@ -7,14 +7,14 @@ import { DatabaseProps } from './function';
  */
 export const INVENTORY_FUNCTION_NAME = 'orcabus-filemanager-inventory';
 
-export type InventoryFunctionConfig = {
+export interface InventoryFunctionConfig {
   /**
    * The buckets that the inventory function can fetch data from. This function needs access to the buckets that
    * contain the `manifest.json` and data files. This option will add policies to access the buckets via
    * 's3:List*' and 's3:Get*'.
    */
   readonly buckets: string[];
-};
+}
 
 /**
  * Props for the inventory function.

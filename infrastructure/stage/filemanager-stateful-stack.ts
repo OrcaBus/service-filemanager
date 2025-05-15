@@ -6,7 +6,7 @@ import { EventSourceConstruct, EventSourceProps } from '../components/event-sour
 /**
  * Stateful config for filemanager.
  */
-export type FileManagerStatefulConfig = {
+interface FileManagerStatefulConfig {
   /**
    * Access key props.
    */
@@ -14,8 +14,8 @@ export type FileManagerStatefulConfig = {
   /**
    * Any configuration related to event source
    */
-  eventSourceProps?: EventSourceProps;
-};
+  eventSourceProps: EventSourceProps;
+}
 
 /**
  * Props for the filemanager stack.
@@ -32,9 +32,6 @@ export class FileManagerStateful extends Stack {
     super(scope, id, props);
 
     this.accessKeySecret = new AccessKeySecret(this, 'AccessKey', props.accessKeyProps);
-
-    if (props.eventSourceProps !== undefined) {
-      new EventSourceConstruct(this, 'EventSourceConstruct', props.eventSourceProps);
-    }
+    new EventSourceConstruct(this, 'EventSourceConstruct', props.eventSourceProps);
   }
 }

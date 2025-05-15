@@ -5,7 +5,7 @@ import { Duration } from 'aws-cdk-lib';
 /**
  * Props for the named lambda role construct.
  */
-export type NamedLambdaRoleProps = {
+export interface NamedLambdaRoleProps {
   /**
    * The name of the role, automatically generated if not specified.
    */
@@ -18,7 +18,7 @@ export type NamedLambdaRoleProps = {
    * Specify the maximum session duration.
    */
   maxSessionDuration?: Duration;
-};
+}
 
 /**
  * A construct which represents a named role that a Lambda function can assume.

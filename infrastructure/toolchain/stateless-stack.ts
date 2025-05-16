@@ -41,7 +41,7 @@ export class StatelessStack extends cdk.Stack {
         },
       },
       pipelineName: 'OrcaBus-StatelessFileManager',
-      cdkSynthCmd: ['pnpm install --frozen-lockfile --ignore-scripts', 'pnpm cdk synth'],
+      cdkSynthCmd: ['pnpm install --frozen-lockfile --ignore-scripts', 'pnpm cdk-stateless synth'],
       synthBuildSpec: {
         phases: {
           install: {

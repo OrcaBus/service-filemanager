@@ -64,7 +64,7 @@ check-fix: lint-fix clippy
 
 ## Clean
 clean: docker-clean
-	@cargo clean
+	@cargo clean && rm -rf target*
 
 ## Database related targets
 psql:

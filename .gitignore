@@ -14,5 +14,5 @@ cdk.out
 .idea
 .DS_Store
 
-app/target/
+app/target*
 app/.env

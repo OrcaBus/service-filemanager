@@ -114,9 +114,6 @@ export class Function extends Construct {
         ...(defaultTarget === 'aarch64-unknown-linux-gnu' && {
           cargoLambdaFlags: ['--compiler', 'cargo'],
         }),
-        dockerOptions: {
-          network: 'host',
-        },
       },
       memorySize: 128,
       timeout: props.timeout ?? Duration.seconds(28),

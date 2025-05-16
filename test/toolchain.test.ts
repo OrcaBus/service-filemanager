@@ -13,16 +13,17 @@ describe('cdk-nag-stateless-toolchain-stack', () => {
       account: '123456789',
       region: 'ap-southeast-2',
     },
+    buildEnvironment: {
+      CARGO_TARGET_DIR: 'target-toolchain-test',
+    },
   });
 
   Aspects.of(statelessStack).add(new AwsSolutionsChecks());
 
   NagSuppressions.addStackSuppressions(statelessStack, [
-    { id: 'AwsSolutions-IAM4', reason: 'Allow CDK Pipeline' },
     { id: 'AwsSolutions-IAM5', reason: 'Allow CDK Pipeline' },
     { id: 'AwsSolutions-S1', reason: 'Allow CDK Pipeline' },
     { id: 'AwsSolutions-KMS5', reason: 'Allow CDK Pipeline' },
-    { id: 'AwsSolutions-CB3', reason: 'Allow CDK Pipeline' },
   ]);
 
   test(`cdk-nag AwsSolutions Pack errors`, () => {
@@ -53,11 +54,9 @@ describe('cdk-nag-stateful-toolchain-stack', () => {
   Aspects.of(statefulStack).add(new AwsSolutionsChecks());
 
   NagSuppressions.addStackSuppressions(statefulStack, [
-    { id: 'AwsSolutions-IAM4', reason: 'Allow CDK Pipeline' },
     { id: 'AwsSolutions-IAM5', reason: 'Allow CDK Pipeline' },
     { id: 'AwsSolutions-S1', reason: 'Allow CDK Pipeline' },
     { id: 'AwsSolutions-KMS5', reason: 'Allow CDK Pipeline' },
-    { id: 'AwsSolutions-CB3', reason: 'Allow CDK Pipeline' },
   ]);
 
   test(`cdk-nag AwsSolutions Pack errors`, () => {

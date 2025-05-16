@@ -38,6 +38,7 @@ export type FileManagerStatelessConfig = Omit<DatabaseProps, 'host' | 'securityG
   fileManagerRoleName: string;
   accessKeySecretArn: string;
   apiGatewayCognitoProps: OrcaBusApiGatewayProps;
+  buildEnvironment?: Record<string, string>;
 };
 
 /**
@@ -81,6 +82,7 @@ export class FileManagerStatelessStack extends Stack {
         host: this.host,
         port: props.port,
         securityGroup: this.securityGroup,
+        buildEnvironment: props.buildEnvironment,
       });
 
       new ProviderFunction(this, 'MigrateProviderFunction', {
@@ -152,6 +154,7 @@ export class FileManagerStatelessStack extends Stack {
       port: props.port,
       buckets: props.inventorySourceBuckets,
       role: this.ingestRole,
+      buildEnvironment: props.buildEnvironment,
     });
   }
 

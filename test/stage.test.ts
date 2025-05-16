@@ -134,6 +134,9 @@ describe('cdk-nag-stateless-toolchain-stack', () => {
         account: '123456789',
         region: 'ap-southeast-2',
       },
+      buildEnvironment: {
+        CARGO_TARGET_DIR: 'target-stage-test',
+      },
     }
   );
 

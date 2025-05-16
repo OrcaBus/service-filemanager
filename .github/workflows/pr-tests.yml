@@ -20,17 +20,9 @@ on:
 
 permissions: read-all
 
-# Actions Used (please keep this documented here as added)
-#  https://github.com/marketplace/actions/checkout
-#  https://github.com/marketplace/actions/setup-python
-#  https://github.com/marketplace/actions/trufflehog-oss
-#  https://github.com/marketplace/actions/checkout
-#  https://github.com/marketplace/actions/cache
-#  https://github.com/actions-rust-lang/setup-rust-toolchain
-
 jobs:
   pre-commit-lint-security:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     if: ${{ !github.event.pull_request.draft }}
     steps:
       - name: Checkout code
@@ -39,20 +31,18 @@ jobs:
           fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
-
       - uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '22.x'
           cache: 'pnpm'
 
       - run: corepack enable
 
-      - name: Install system-wide tools dependencies
-        run: |
-          pip3 install pre-commit detect-secrets
+      - uses: actions/setup-python@v3
+      - uses: pre-commit/action@v3.0.1
 
       - name: TruffleHog OSS
-        uses: trufflesecurity/trufflehog@v3.34.0
+        uses: trufflesecurity/trufflehog@v3.88.29
         with:
           path: ./
           base: ${{ github.event.repository.default_branch }}
@@ -68,7 +58,7 @@ jobs:
           make check
 
   test-iac:
-    runs-on: ubuntu-22.04-arm
+    runs-on: ubuntu-24.04-arm
     if: ${{ !github.event.pull_request.draft }}
     steps:
       - name: Cache
@@ -78,6 +68,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - run: curl -fsSL https://cargo-lambda.info/install.sh | sh
 
       - uses: actions/checkout@v4
 
@@ -85,19 +76,18 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '22.x'
           cache: 'pnpm'
 
       - run: corepack enable
 
       - run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - run: pnpm test
+      - run: make test
 
   test-app:
-    runs-on: ubuntu-22.04-arm
-    # Do not run this step on the template.yaml service base repository as a Makefile is not yet defined.
-    if: ${{ !github.event.pull_request.draft && github.repository != 'OrcaBus/template.yaml-service-base' }}
+    runs-on: ubuntu-24.04-arm
+    if: ${{ !github.event.pull_request.draft }}
     steps:
       - name: Cache
         uses: mozilla-actions/sccache-action@v0.0.8
@@ -106,6 +96,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - run: curl -fsSL https://cargo-lambda.info/install.sh | sh
 
       - name: Checkout code
         uses: actions/checkout@v4

@@ -174,13 +174,14 @@ impl CredentialGenerator for IamGenerator {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::database::aws::credentials::Config;
+    use aws_config::defaults;
+    use aws_credential_types::Credentials;
+    use aws_smithy_runtime_api::client::behavior_version::BehaviorVersion;
     use std::borrow::Cow;
     use std::collections::HashMap;
     use std::future::Future;
-
-    use super::*;
-    use aws_credential_types::Credentials;
 
     #[tokio::test]
     async fn generate_iam_token() {
@@ -221,16 +222,20 @@ mod tests {
         F: FnOnce(Config) -> Fut,
         Fut: Future<Output = IamGenerator>,
     {
-        let config = Config::from_provider(Credentials::new(
+        let provider = Credentials::new(
             "access-key-id",
             "secret-access-key",
             Some("session-token".to_string()),
             Some(SystemTime::UNIX_EPOCH),
             "provider-name",
-        ))
-        .await;
+        );
+        let sdk_config = defaults(BehaviorVersion::latest())
+            .credentials_provider(provider)
+            .region("ap-southeast-2")
+            .load()
+            .await;
 
-        let generator = create_generator(config).await;
+        let generator = create_generator(Config::new(sdk_config)).await;
         // Add the scheme back in so that the url can be parsed.
         let mut url = "https://".to_string();
         url.push_str(&generator.generate_iam_token().await.unwrap());

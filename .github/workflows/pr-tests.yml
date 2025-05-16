@@ -102,12 +102,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install
-        working-directory: ./app
-        run: |
-          make install
-
-      - name: Install
+      - name: Test
         working-directory: ./app
         run: |
           make test
+
+      - name: Check diff
+        run: git diff --quiet HEAD

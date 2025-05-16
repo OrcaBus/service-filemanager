@@ -38,8 +38,9 @@ jobs:
 
       - run: corepack enable
 
-      - uses: actions/setup-python@v3
-      - uses: pre-commit/action@v3.0.1
+      - name: Install pre-commit
+        run: |
+          pip3 install pre-commit
 
       - name: TruffleHog OSS
         uses: trufflesecurity/trufflehog@v3.88.29

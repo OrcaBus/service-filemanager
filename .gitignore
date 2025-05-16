@@ -13,3 +13,6 @@ cdk.out
 # IDE
 .idea
 .DS_Store
+
+app/target*
+app/.env

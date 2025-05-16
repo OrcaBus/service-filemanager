@@ -7,17 +7,17 @@ import { TOOLCHAIN_ENVIRONMENT } from '@orcabus/platform-cdk-constructs/deployme
 
 const app = new cdk.App();
 
-const deployMode = app.node.tryGetContext('deployMode');
+const deployMode = app.node.tryGetContext('deployMode') as string | undefined;
 if (!deployMode) {
   throw new Error("deployMode is required in context ('-c deployMode=stateless')");
 }
 
 if (deployMode === 'stateless') {
-  new StatelessStack(app, 'OrcaBusStatelessServiceStack', {
+  new StatelessStack(app, 'OrcaBusStatelessFileManagerStack', {
     env: TOOLCHAIN_ENVIRONMENT,
   });
 } else if (deployMode === 'stateful') {
-  new StatefulStack(app, 'OrcaBusStatefulServiceStack', {
+  new StatefulStack(app, 'OrcaBusStatefulFileManagerStack', {
     env: TOOLCHAIN_ENVIRONMENT,
   });
 } else {

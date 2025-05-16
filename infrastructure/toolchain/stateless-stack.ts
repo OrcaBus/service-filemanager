@@ -49,9 +49,10 @@ export class StatelessStack extends cdk.Stack {
               nodejs: '22.x',
             },
             commands: [
-              "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y ",
+              "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y",
               'source $HOME/.cargo/env',
               'rustup component add rustfmt',
+              'npm install -g @ziglang/cli',
               'curl -fsSL https://cargo-lambda.info/install.sh | sh',
             ],
           },
@@ -60,5 +61,10 @@ export class StatelessStack extends cdk.Stack {
     });
 
     this.pipeline = deployment.pipeline;
+
+    // new PipelineSlackNotifier(this, 'SlackNotifier', {
+    //   pipeline: this.pipeline,
+    //   notificationName: 'orcabus_file_manager_stateless_pipeline_notification',
+    // });
   }
 }

@@ -49,7 +49,7 @@ export type FileManagerStatelessProps = StackProps & FileManagerStatelessConfig;
 /**
  * Construct used to configure the filemanager.
  */
-export class FileManagerStatelessStack extends Stack {
+export class FileManagerStack extends Stack {
   private readonly vpc: IVpc;
   private readonly host: string;
   private readonly securityGroup: ISecurityGroup;
@@ -202,6 +202,10 @@ export class FileManagerStatelessStack extends Stack {
       authorizer: apiGateway.authStackHttpLambdaAuthorizer,
       routeKey: HttpRouteKey.with('/{proxy+}', HttpMethod.POST),
     });
+
+    // Required to keep references to filemanager stack dependents, i.e. FMAnnotator and Htsget
+    this.exportValue(this.ingestRole.roleArn);
+    this.exportValue(apiGateway.domainName);
 
     return apiGateway.domainName;
   }

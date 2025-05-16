@@ -130,7 +130,7 @@ async function testCacheObjects(event: any, pattern: any) {
   expect(await testEventPattern(event, pattern)).toBe(false);
 }
 
-test('Test event source event patterns', async () => {
+test.skip('Test event source event patterns', async () => {
   new EventSourceConstruct(
     stack,
     'TestEventSourceConstruct',

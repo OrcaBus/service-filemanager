@@ -49,7 +49,7 @@ export type FileManagerStatelessProps = StackProps & FileManagerStatelessConfig;
 /**
  * Construct used to configure the filemanager.
  */
-export class FileManagerStatelessStack extends Stack {
+export class FileManagerStack extends Stack {
   private readonly vpc: IVpc;
   private readonly host: string;
   private readonly securityGroup: ISecurityGroup;

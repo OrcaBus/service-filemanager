@@ -14,6 +14,7 @@ describe('cdk-nag-stateless-toolchain-stack', () => {
       region: 'ap-southeast-2',
     },
     buildEnvironment: {
+      // Need to have a separate build directory to the stage test to avoid concurrent build errors.
       CARGO_TARGET_DIR: 'target-toolchain-test',
     },
   });

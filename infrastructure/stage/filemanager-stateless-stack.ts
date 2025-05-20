@@ -203,10 +203,6 @@ export class FileManagerStack extends Stack {
       routeKey: HttpRouteKey.with('/{proxy+}', HttpMethod.POST),
     });
 
-    // Required to keep references to filemanager stack dependents, i.e. FMAnnotator and Htsget
-    this.exportValue(this.ingestRole.roleArn);
-    this.exportValue(apiGateway.domainName);
-
     return apiGateway.domainName;
   }
 }

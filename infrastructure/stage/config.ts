@@ -35,7 +35,7 @@ export const getFileManagerStatelessProps = (stage: StageName): FileManagerState
     apiGatewayCognitoProps: {
       ...getDefaultApiGatewayConfiguration(stage),
       apiName: 'FileManager',
-      customDomainNamePrefix: 'file-dev-deploy',
+      customDomainNamePrefix: 'file',
     },
   };
 };

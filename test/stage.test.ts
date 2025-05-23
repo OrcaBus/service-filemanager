@@ -1,7 +1,7 @@
 import { App, Aspects, Stack } from 'aws-cdk-lib';
 import { Annotations, Match } from 'aws-cdk-lib/assertions';
 import { AwsSolutionsChecks, NagSuppressions } from 'cdk-nag';
-import { FileManagerStatelessStack } from '../infrastructure/stage/filemanager-stateless-stack';
+import { FileManagerStack } from '../infrastructure/stage/filemanager-stateless-stack';
 import {
   getFileManagerStatefulProps,
   getFileManagerStatelessProps,
@@ -125,20 +125,17 @@ function cdkNagStack(stack: Stack, applySuppressions: (stack: Stack) => void) {
 describe('cdk-nag-stateless-toolchain-stack', () => {
   const app = new App();
 
-  const filemanagerStatelessStack = new FileManagerStatelessStack(
-    app,
-    'FileManagerStatelessStack',
-    {
-      ...getFileManagerStatelessProps('PROD'),
-      env: {
-        account: '123456789',
-        region: 'ap-southeast-2',
-      },
-      buildEnvironment: {
-        CARGO_TARGET_DIR: 'target-stage-test',
-      },
-    }
-  );
+  const filemanagerStatelessStack = new FileManagerStack(app, 'FileManagerStatelessStack', {
+    ...getFileManagerStatelessProps('PROD'),
+    env: {
+      account: '123456789',
+      region: 'ap-southeast-2',
+    },
+    buildEnvironment: {
+      // Need to have a separate build directory to the toolchain test to avoid concurrent build errors.
+      CARGO_TARGET_DIR: 'target-stage-test',
+    },
+  });
 
   cdkNagStack(filemanagerStatelessStack, applyStatelessNagSuppressions);
 });

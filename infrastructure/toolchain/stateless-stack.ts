@@ -22,7 +22,7 @@ export class StatelessStack extends cdk.Stack {
     super(scope, id, props);
 
     const deployment = new DeploymentStackPipeline(this, 'DeploymentPipeline', {
-      githubBranch: 'initialize',
+      githubBranch: 'main',
       githubRepo: 'service-filemanager',
       stack: FileManagerStack,
       stackName: 'FileManagerStack',
@@ -61,10 +61,5 @@ export class StatelessStack extends cdk.Stack {
     });
 
     this.pipeline = deployment.pipeline;
-
-    // new PipelineSlackNotifier(this, 'SlackNotifier', {
-    //   pipeline: this.pipeline,
-    //   notificationName: 'orcabus_file_manager_stateless_pipeline_notification',
-    // });
   }
 }

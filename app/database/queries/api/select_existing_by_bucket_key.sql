@@ -8,15 +8,15 @@ with input as (
     select
         *
     from unnest(
-            $1::text[],
-            $2::text[],
-            $3::text[]
-         ) as input (
-    bucket,
-    key,
-    version_id
+        $1::text[],
+        $2::text[],
+        $3::text[]
+    ) as input (
+        bucket,
+        key,
+        version_id
     )
-    )
+)
 -- Select objects into a FlatS3EventMessage struct.
 select
     s3_object_id,
@@ -41,18 +41,18 @@ select
     0::bigint as "number_reordered"
 from input
 -- Grab the most recent object in each input group.
-    cross join lateral (
--- Cross join the input with one s3_object based on the most recent event.
+cross join lateral (
+    -- Cross join the input with one s3_object based on the most recent event.
     select
-    *
+        *
     from s3_object
     where
-    input.bucket = s3_object.bucket and
-    input.key = s3_object.key and
-    input.version_id = s3_object.version_id and
-    s3_object.is_current_state = true
+        input.bucket = s3_object.bucket and
+        input.key = s3_object.key and
+        input.version_id = s3_object.version_id and
+        s3_object.is_current_state = true
     order by s3_object.sequencer desc nulls last
     limit 1
-    )
-    as s3_object
-    for update;
+)
+as s3_object
+for update;

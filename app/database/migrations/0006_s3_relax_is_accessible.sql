@@ -4,7 +4,9 @@
 alter table s3_object drop column is_accessible;
 alter table s3_object add column is_accessible bool not null generated always as (
     is_current_state and
-    storage_class != 'Glacier' and
-    (storage_class != 'DeepArchive' or reason = 'Restored' or reason = 'CrawlRestored') and
-    (storage_class != 'IntelligentTiering' or archive_status is null)
+    (storage_class is null or (
+        storage_class != 'Glacier' and
+        (storage_class != 'DeepArchive' or reason = 'Restored' or reason = 'CrawlRestored') and
+        (storage_class != 'IntelligentTiering' or archive_status is null)
+    ))
 ) stored;

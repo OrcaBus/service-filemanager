@@ -183,7 +183,7 @@ export class Function extends Construct {
    * Get policy actions for versioned objects.
    */
   static getObjectActions(): string[] {
-    return ['s3:ListBucket', 's3:GetObject'];
+    return ['s3:ListBucket', 's3:ListBucketVersions', 's3:GetObject'];
   }
 
   /**

@@ -101,8 +101,10 @@ pub async fn crawl_s3(
         crawl_sync_s3(state_copy, WithRejection(extract::Json(crawl), PhantomData)).await
     });
 
-    let mut task = state.crawl_task.lock().await;
-    *task = Some(handle);
+    // let mut task = state.crawl_task.lock().await;
+    // *task = Some(handle);
+
+    let _ = handle.await.map_err(|err| CrawlError(err.to_string()))??;
 
     Ok(NoContent)
 }
@@ -150,12 +152,12 @@ pub async fn crawl_sync_s3(
             let mut to_update = in_progress.into_active_model();
             to_update.status = Set(CrawlStatus::Failed);
             to_update.update(conn).await?;
+        } else {
+            return Err(CrawlError(format!(
+                "another crawl on {} is already in progress",
+                crawl.bucket
+            )));
         }
-
-        return Err(CrawlError(format!(
-            "another crawl on {} is already in progress",
-            crawl.bucket
-        )));
     }
 
     // New crawl can be started.

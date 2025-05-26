@@ -86,24 +86,25 @@ impl Client {
         self.inner.list_buckets().send().await
     }
 
-    /// Execute the `ListObjectsV2` operation, and handle pagination to produce all possible
+    /// Execute the `ListObjectVersions` operation, and handle pagination to produce all possible
     /// records.
     pub async fn list_objects(
         &self,
         bucket: &str,
         prefix: Option<String>,
     ) -> Result<ListObjectVersionsOutput, ListObjectVersionsError> {
-        let list = |marker| async {
+        let list = |key_marker, version_id_marker| async {
             self.inner
                 .list_object_versions()
                 .bucket(bucket)
                 .set_prefix(prefix.clone())
-                .set_key_marker(marker)
+                .set_version_id_marker(version_id_marker)
+                .set_key_marker(key_marker)
                 .send()
                 .await
         };
 
-        let mut result = list(None).await?;
+        let mut result = list(None, None).await?;
 
         for _ in 0..MAX_LIST_ITERATIONS {
             if !result
@@ -113,7 +114,7 @@ impl Client {
                 break;
             }
 
-            let mut next = list(result.next_key_marker).await?;
+            let mut next = list(result.next_key_marker, result.version_id_marker).await?;
 
             next.versions
                 .get_or_insert_default()

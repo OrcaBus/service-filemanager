@@ -40,9 +40,11 @@ impl Crawl {
             return Ok(FlatS3EventMessages::default());
         };
 
+        // We only want to crawl current objects.
         Ok(FlatS3EventMessages(
             versions
                 .into_iter()
+                .filter(|object| object.is_latest.is_some_and(|latest| latest))
                 .map(|object| FlatS3EventMessage::from(object).with_bucket(bucket.to_string()))
                 .collect(),
         ))

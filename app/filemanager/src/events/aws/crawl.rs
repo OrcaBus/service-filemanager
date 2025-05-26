@@ -151,6 +151,7 @@ pub(crate) mod tests {
                                 ObjectVersion::builder()
                                     .key("key")
                                     .size(1)
+                                    .is_latest(true)
                                     .e_tag(EXPECTED_QUOTED_E_TAG)
                                     .build(),
                             )
@@ -158,6 +159,7 @@ pub(crate) mod tests {
                                 ObjectVersion::builder()
                                     .key("key")
                                     .size(2)
+                                    .is_latest(true)
                                     .e_tag(EXPECTED_QUOTED_E_TAG)
                                     .build(),
                             )

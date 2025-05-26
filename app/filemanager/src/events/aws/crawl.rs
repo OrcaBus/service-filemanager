@@ -8,7 +8,7 @@ use crate::events::aws::message::{default_version_id, quote_e_tag, EventType};
 
 use crate::events::aws::{FlatS3EventMessage, FlatS3EventMessages};
 use crate::uuid::UuidGenerator;
-use aws_sdk_s3::types::Object;
+use aws_sdk_s3::types::ObjectVersion;
 use chrono::Utc;
 
 /// Represents crawl operations.
@@ -36,12 +36,12 @@ impl Crawl {
     ) -> Result<FlatS3EventMessages> {
         let list = self.client.list_objects(bucket, prefix).await?;
 
-        let Some(contents) = list.contents else {
+        let Some(versions) = list.versions else {
             return Ok(FlatS3EventMessages::default());
         };
 
         Ok(FlatS3EventMessages(
-            contents
+            versions
                 .into_iter()
                 .map(|object| FlatS3EventMessage::from(object).with_bucket(bucket.to_string()))
                 .collect(),
@@ -49,13 +49,14 @@ impl Crawl {
     }
 }
 
-impl From<Object> for FlatS3EventMessage {
-    fn from(object: Object) -> Self {
-        let Object {
+impl From<ObjectVersion> for FlatS3EventMessage {
+    fn from(object: ObjectVersion) -> Self {
+        let ObjectVersion {
             key,
             e_tag,
             size,
             restore_status,
+            version_id,
             ..
         } = object;
 
@@ -74,7 +75,7 @@ impl From<Object> for FlatS3EventMessage {
             e_tag: e_tag.map(quote_e_tag),
             // Set this to null to generate a sequencer.
             sequencer: None,
-            version_id: default_version_id(),
+            version_id: version_id.unwrap_or_else(default_version_id),
             // Head fields are fetched later.
             storage_class: None,
             last_modified_date: None,
@@ -99,7 +100,7 @@ pub(crate) mod tests {
     use crate::events::aws::message::EventType::Created;
     use crate::events::aws::tests::assert_flat_without_time;
     use crate::events::aws::tests::EXPECTED_QUOTED_E_TAG;
-    use aws_sdk_s3::operation::list_objects_v2::ListObjectsV2Output;
+    use aws_sdk_s3::operation::list_object_versions::ListObjectVersionsOutput;
     use aws_smithy_mocks_experimental::{mock, mock_client};
     use aws_smithy_mocks_experimental::{Rule, RuleMode};
 
@@ -138,21 +139,21 @@ pub(crate) mod tests {
             aws_sdk_s3,
             RuleMode::MatchAny,
             &[
-                &[mock!(aws_sdk_s3::Client::list_objects_v2)
+                &[mock!(aws_sdk_s3::Client::list_object_versions)
                     .match_requests(
                         |req| req.bucket() == Some("bucket") && req.prefix() == Some("prefix")
                     )
                     .then_output(move || {
-                        ListObjectsV2Output::builder()
-                            .contents(
-                                Object::builder()
+                        ListObjectVersionsOutput::builder()
+                            .versions(
+                                ObjectVersion::builder()
                                     .key("key")
                                     .size(1)
                                     .e_tag(EXPECTED_QUOTED_E_TAG)
                                     .build(),
                             )
-                            .contents(
-                                Object::builder()
+                            .versions(
+                                ObjectVersion::builder()
                                     .key("key")
                                     .size(2)
                                     .e_tag(EXPECTED_QUOTED_E_TAG)

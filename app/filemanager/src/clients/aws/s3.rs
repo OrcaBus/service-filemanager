@@ -9,7 +9,9 @@ use aws_sdk_s3::operation::get_object::{GetObjectError, GetObjectOutput};
 use aws_sdk_s3::operation::get_object_tagging::{GetObjectTaggingError, GetObjectTaggingOutput};
 use aws_sdk_s3::operation::head_object::{HeadObjectError, HeadObjectOutput};
 use aws_sdk_s3::operation::list_buckets::{ListBucketsError, ListBucketsOutput};
-use aws_sdk_s3::operation::list_objects_v2::{ListObjectsV2Error, ListObjectsV2Output};
+use aws_sdk_s3::operation::list_object_versions::{
+    ListObjectVersionsError, ListObjectVersionsOutput,
+};
 use aws_sdk_s3::operation::put_object_tagging::{PutObjectTaggingError, PutObjectTaggingOutput};
 use aws_sdk_s3::presigning::{PresignedRequest, PresigningConfig};
 use aws_sdk_s3::types::ChecksumMode::Enabled;
@@ -90,13 +92,13 @@ impl Client {
         &self,
         bucket: &str,
         prefix: Option<String>,
-    ) -> Result<ListObjectsV2Output, ListObjectsV2Error> {
-        let list = |token| async {
+    ) -> Result<ListObjectVersionsOutput, ListObjectVersionsError> {
+        let list = |marker| async {
             self.inner
-                .list_objects_v2()
+                .list_object_versions()
                 .bucket(bucket)
                 .set_prefix(prefix.clone())
-                .set_continuation_token(token)
+                .set_key_marker(marker)
                 .send()
                 .await
         };
@@ -111,16 +113,14 @@ impl Client {
                 break;
             }
 
-            let mut next = list(result.next_continuation_token).await?;
+            let mut next = list(result.next_key_marker).await?;
 
-            next.contents
+            next.versions
                 .get_or_insert_default()
-                .extend(result.contents.unwrap_or_default());
+                .extend(result.versions.unwrap_or_default());
             next.common_prefixes
                 .get_or_insert_default()
                 .extend(result.common_prefixes.unwrap_or_default());
-            next.key_count =
-                Some(next.key_count.unwrap_or_default() + result.key_count.unwrap_or_default());
             next.max_keys =
                 Some(next.max_keys.unwrap_or_default() + result.max_keys.unwrap_or_default());
 

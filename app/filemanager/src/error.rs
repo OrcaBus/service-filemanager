@@ -1,11 +1,17 @@
 //! Errors used by the filemanager crate.
 //!
 
-use aws_sdk_s3::error::SdkError;
-use aws_sdk_s3::operation::list_objects_v2::ListObjectsV2Error;
+use aws_sdk_s3::error::{DisplayErrorContext, ProvideErrorMetadata, SdkError};
+use aws_sdk_s3::operation::get_object::GetObjectError;
+use aws_sdk_s3::operation::get_object_tagging::GetObjectTaggingError;
+use aws_sdk_s3::operation::head_object::HeadObjectError;
+use aws_sdk_s3::operation::list_object_versions::ListObjectVersionsError;
+use aws_sdk_s3::operation::put_object_tagging::PutObjectTaggingError;
+use aws_sdk_sqs::operation::receive_message::ReceiveMessageError;
+use aws_sdk_sqs::operation::send_message::SendMessageError;
 use sea_orm::{DbErr, RuntimeErr};
 use std::num::TryFromIntError;
-use std::{io, result};
+use std::{error, io, result};
 use thiserror::Error;
 use url::ParseError;
 use uuid::Uuid;
@@ -86,14 +92,52 @@ impl From<ParseError> for Error {
     }
 }
 
-impl From<SdkError<ListObjectsV2Error>> for Error {
-    fn from(error: SdkError<ListObjectsV2Error>) -> Self {
-        Self::S3Error(error.into_service_error().to_string())
-    }
-}
-
 impl From<TryFromIntError> for Error {
     fn from(error: TryFromIntError) -> Self {
         Self::ConversionError(error.to_string())
     }
 }
+
+impl<T> From<(SdkError<T>, String)> for Error
+where
+    T: ProvideErrorMetadata + error::Error + Send + Sync + 'static,
+{
+    fn from((err, call): (SdkError<T>, String)) -> Self {
+        Self::S3Error(format!(
+            "{} for {}: {}",
+            err.code().unwrap_or("Unknown"),
+            call,
+            err.message()
+                .map(|msg| msg.to_string())
+                .or_else(|| err.as_service_error().map(|err| err.to_string()))
+                .unwrap_or_else(|| DisplayErrorContext(&err).to_string())
+        ))
+    }
+}
+
+/// Generate an impl for an AWS error type with the context of the API call.
+macro_rules! generate_aws_error_impl {
+    ($t:ty) => {
+        impl From<SdkError<$t>> for Error {
+            fn from(err: SdkError<$t>) -> Self {
+                let api_call = stringify!($t);
+                (
+                    err,
+                    api_call
+                        .strip_suffix("Error")
+                        .unwrap_or(api_call)
+                        .to_string(),
+                )
+                    .into()
+            }
+        }
+    };
+}
+
+generate_aws_error_impl!(HeadObjectError);
+generate_aws_error_impl!(GetObjectError);
+generate_aws_error_impl!(ListObjectVersionsError);
+generate_aws_error_impl!(GetObjectTaggingError);
+generate_aws_error_impl!(PutObjectTaggingError);
+generate_aws_error_impl!(ReceiveMessageError);
+generate_aws_error_impl!(SendMessageError);

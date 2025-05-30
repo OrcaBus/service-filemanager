@@ -32,7 +32,6 @@ use sea_orm::ActiveValue::Set;
 use sea_orm::{ActiveModelTrait, ConnectionTrait, EntityTrait, IntoActiveModel, TransactionTrait};
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
-use std::ops::Deref;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 

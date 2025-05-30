@@ -22,8 +22,8 @@ use crate::routes::AppState;
 ///
 /// In order to apply the patch, JSON body must contain an array with patch operations. The patch operations
 /// are append-only, which means that only "add", "copy" and "test" is supported. If a "test" check fails,
-/// a patch operations that isn't "add" or "test" is used, a `BAD_REQUEST` is returned and no records
-/// are updated. Note, that "add" is allowed to replace existing paths in the attributes. Use
+/// a patch operations that isn't "add", "copy" or "test" is used, a `BAD_REQUEST` is returned and no
+/// records are updated. Note, that "add" is allowed to replace existing paths in the attributes. Use
 /// `attributes` to update attributes and `ingestId` to update the ingest id.
 #[derive(Debug, Deserialize, Clone, ToSchema)]
 #[serde(untagged)]

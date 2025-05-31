@@ -1,13 +1,13 @@
 #!/bin/bash
 
-list_only=''
+verify_tags=''
 bucket=''
 prefix=''
-while getopts 'b:p:l' flag; do
+while getopts 'b:p:v' flag; do
   case "${flag}" in
     b) bucket="${OPTARG}" ;;
     p) prefix="${OPTARG}" ;;
-    l) list_only="true" ;;
+    v) verify_tags="true" ;;
     *) error "Unexpected option ${flag}" ;;
   esac
 done
@@ -17,8 +17,21 @@ if [ -z "$bucket" ] || [ -z "$prefix" ]; then
   exit 1
 fi
 
-if [[ $list_only ]]; then
-  aws s3 ls "$bucket/$prefix" --summarize --recursive
+declare -A tags
+results=$(aws s3 ls "$bucket/$prefix" --recursive | awk '{print $4}')
+while IFS= read -r line; do
+    tagging=$(aws s3api get-object-tagging --bucket "$bucket" --key "$line" | jq '.TagSet | .[] | .Value')
+
+    echo "Checking $bucket and $line ..."
+    if [ -z "${tagging}" ]; then
+      echo "Missing tag for $bucket and $line!"
+      exit 1
+    fi
+
+    tags["$line"]=$tagging
+done <<< "$results"
+
+if [[ $verify_tags ]]; then
   exit 0
 fi
 
@@ -38,8 +51,15 @@ if [ "$expected_n_objects" != "$crawl" ]; then
   exit 1
 fi
 
-updated=$(curl -H "Authorization: Bearer $TOKEN" "https://file.prod.umccr.org/api/v1/s3?bucket=$bucket&key=$prefix*" | jq)
+for key in "${!tags[@]}"; do
+  updatedId=$(curl -H "Authorization: Bearer $TOKEN" "https://file.prod.umccr.org/api/v1/s3?bucket=$bucket&key=$key" | jq '.results | .[] | .ingestId')
+  if [ "$updatedId" != "${tags[${key}]}" ]; then
+    echo "mismatched tags for $key in $bucket!"
+    exit 1
+  fi
+done
 
+updated=$(curl -H "Authorization: Bearer $TOKEN" "https://file.prod.umccr.org/api/v1/s3?bucket=$bucket&key=$prefix*" | jq)
 diff -u <(echo "$previous") <(echo "$updated") > "$(echo "$bucket" | tr "/" _)"_"$(echo "$prefix" | tr "/" _)".txt
 
 # Assert that there are no lines which change the ingestId

@@ -139,25 +139,13 @@ where
     }
 
     /// Verifies that the JSON patch operation is supported.
-    fn verify_patch(
-        patch: Vec<PatchOperation>,
-        current_attributes: &serde_json::Value,
-    ) -> Result<Vec<PatchOperation>> {
-        let check_exists = |path: String, patch: PatchOperation| {
-            let exists = current_attributes.pointer(&path);
-            if exists.is_some() {
-                Err(InvalidQuery("path already exists".to_string()))
-            } else {
-                Ok(patch)
-            }
-        };
-
+    fn verify_patch(patch: Vec<PatchOperation>) -> Result<Vec<PatchOperation>> {
         patch
             .into_iter()
             .map(|patch| match patch {
                 PatchOperation::Test(_) => Ok(patch),
-                PatchOperation::Add(ref op) => check_exists(op.path.to_string(), patch),
-                PatchOperation::Copy(ref op) => check_exists(op.path.to_string(), patch),
+                PatchOperation::Add(_) => Ok(patch),
+                PatchOperation::Copy(_) => Ok(patch),
                 _ => Err(InvalidQuery("unsupported JSON patch operation".to_string())),
             })
             .collect::<Result<Vec<_>>>()
@@ -179,8 +167,7 @@ where
             return Err(QueryError("expected JSON attribute column".to_string()));
         };
 
-        // Only append-style patching is supported.
-        let operations = Self::verify_patch(patch_body, &current)?;
+        let operations = Self::verify_patch(patch_body)?;
 
         // Patch it based on JSON patch.
         patch(&mut current, operations.as_slice()).map_err(|err| {
@@ -406,20 +393,6 @@ pub(crate) mod tests {
         .await;
         assert!(matches!(results, Err(InvalidQuery(_))));
 
-        let patch = json!([
-            { "op": "test", "path": "/attributeId", "value": "1" },
-            { "op": "add", "path": "/attributeId", "value": "attributeId" },
-        ]);
-        let results = test_s3_builder_result(
-            &client,
-            Some(json!({
-                "attributeId": "1"
-            })),
-            PatchBody::new(from_value(patch).unwrap()),
-        )
-        .await;
-        assert!(matches!(results, Err(InvalidQuery(_))));
-
         entries_many(&mut entries, &[0, 1], json!({"attributeId": "1"}));
         assert_correct_records(&client, entries).await;
     }
@@ -447,6 +420,38 @@ pub(crate) mod tests {
             &mut entries,
             &[0, 1],
             json!({"attributeId": "1", "anotherAttribute": "1"}),
+        );
+
+        assert_contains(&results, &entries, 0..2);
+        assert_correct_records(&client, entries).await;
+    }
+
+    #[sqlx::test(migrator = "MIGRATOR")]
+    async fn update_attributes_add_replace(pool: PgPool) {
+        let client = Client::from_pool(pool);
+        let mut entries = EntriesBuilder::default().build(&client).await.unwrap();
+
+        change_many(
+            &client,
+            &entries,
+            &[0, 1],
+            Some(json!({"attributeId": "1"})),
+        )
+        .await;
+
+        let patch = json!([
+            { "op": "add", "path": "/anotherAttribute", "value": "1" },
+            { "op": "test", "path": "/attributeId", "value": "1" },
+            // Add to replace is allowed.
+            { "op": "add", "path": "/attributeId", "value": "attributeId" },
+        ]);
+
+        let results = test_update_with_attribute_id(&client, patch).await;
+
+        entries_many(
+            &mut entries,
+            &[0, 1],
+            json!({"attributeId": "attributeId", "anotherAttribute": "1"}),
         );
 
         assert_contains(&results, &entries, 0..2);

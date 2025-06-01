@@ -179,7 +179,8 @@ the same name.
 As part of allowing filemanager to link and query on attributes, attributes can be updated using PATCH requests.
 Each of the above endpoints and queries supports a PATCH request which can be used to update attributes on a set
 of records, instead of listing records. All query parameters except pagination are supported for updates.
-Attributes are update using [JSON patch][json-patch].
+Attributes are updated using [JSON patch][json-patch]. To update attributes, the patch operation must be `add`, `test`,
+or `copy`, noting that `add` is able to replace existing attributes.
 
 For example, update attributes on a single record:
 

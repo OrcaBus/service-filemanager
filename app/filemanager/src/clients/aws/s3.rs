@@ -15,7 +15,7 @@ use aws_sdk_s3::operation::list_object_versions::{
 use aws_sdk_s3::operation::put_object_tagging::{PutObjectTaggingError, PutObjectTaggingOutput};
 use aws_sdk_s3::presigning::{PresignedRequest, PresigningConfig};
 use aws_sdk_s3::types::ChecksumMode::Enabled;
-use aws_sdk_s3::types::Tagging;
+use aws_sdk_s3::types::{OptionalObjectAttributes, Tagging};
 use chrono::Duration;
 
 use crate::clients::aws::config::Config;
@@ -100,6 +100,7 @@ impl Client {
                 .set_prefix(prefix.clone())
                 .set_version_id_marker(version_id_marker)
                 .set_key_marker(key_marker)
+                .optional_object_attributes(OptionalObjectAttributes::RestoreStatus)
                 .send()
                 .await
         };

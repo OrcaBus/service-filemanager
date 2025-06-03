@@ -2,8 +2,8 @@ import { App, Aspects } from 'aws-cdk-lib';
 import { Annotations, Match } from 'aws-cdk-lib/assertions';
 import { AwsSolutionsChecks, NagSuppressions } from 'cdk-nag';
 import { StatelessStack } from '../infrastructure/toolchain/stateless-stack';
-import { synthesisMessageToString } from './utils';
 import { StatefulStack } from '../infrastructure/toolchain/stateful-stack';
+import { synthesisMessageToString } from '@orcabus/platform-cdk-constructs/utils';
 
 describe('cdk-nag-stateless-toolchain-stack', () => {
   const app = new App({});

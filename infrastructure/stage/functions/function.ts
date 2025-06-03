@@ -6,8 +6,8 @@ import { ManagedPolicy, PolicyStatement, Role } from 'aws-cdk-lib/aws-iam';
 import { RustFunction } from 'cargo-lambda-cdk';
 import path from 'path';
 import { FILEMANAGER_SERVICE_NAME, rdsPolicyName } from '../constants';
-import { NamedLambdaRole } from '../../components/named-lambda-role';
 import { spawnSync } from 'node:child_process';
+import { NamedLambdaRole } from '@orcabus/platform-cdk-constructs/named-lambda-role';
 
 /**
  * Properties for the database.

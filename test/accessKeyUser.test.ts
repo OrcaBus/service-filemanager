@@ -1,11 +1,11 @@
 import * as cdk from 'aws-cdk-lib';
 import { Template } from 'aws-cdk-lib/assertions';
 import { getFileManagerStatefulProps } from '../infrastructure/stage/config';
+import { FileManagerStatefulStack } from '../infrastructure/stage/filemanager-stateful-stack';
 import {
   fileManagerPresignUser,
   fileManagerPresignUserSecret,
-} from '../infrastructure/stage/constants';
-import { FileManagerStatefulStack } from '../infrastructure/stage/filemanager-stateful-stack';
+} from '@orcabus/platform-cdk-constructs/shared-config/file-manager';
 
 const app = new cdk.App();
 

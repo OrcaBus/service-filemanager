@@ -1,22 +1,24 @@
 import { FileManagerStatelessConfig } from './filemanager-stateless-stack';
-import {
-  accessKeySecretArn,
-  computeSecurityGroupName,
-  databasePort,
-  dbClusterEndpointHostParameterName,
-  eventSourceQueueName,
-  fileManagerBuckets,
-  fileManagerCacheBuckets,
-  fileManagerIngestRoleName,
-  fileManagerPresignUser,
-  fileManagerPresignUserSecret,
-  vpcProps,
-} from './constants';
 import { StageName } from '@orcabus/platform-cdk-constructs/utils';
 import { getDefaultApiGatewayConfiguration } from '@orcabus/platform-cdk-constructs/api-gateway';
 import { Function } from './functions/function';
 import { EventSourceProps } from '../components/event-source';
 import { FileManagerStatefulConfig } from './filemanager-stateful-stack';
+import {
+  accessKeySecretArn,
+  fileManagerBuckets,
+  fileManagerCacheBuckets,
+  fileManagerIngestRoleName,
+  fileManagerPresignUser,
+  fileManagerPresignUserSecret,
+} from '@orcabus/platform-cdk-constructs/shared-config/file-manager';
+import {
+  computeSecurityGroupName,
+  databasePort,
+  dbClusterEndpointHostParameterName,
+  eventSourceQueueName,
+  vpcProps,
+} from './constants';
 
 export const getFileManagerStatelessProps = (stage: StageName): FileManagerStatelessConfig => {
   const buckets = [...fileManagerBuckets[stage], ...fileManagerCacheBuckets[stage]];

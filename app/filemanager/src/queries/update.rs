@@ -431,7 +431,7 @@ pub(crate) mod tests {
             Some(json!({"attributeId": "1"})),
         )
         .await;
-        update_ingest_ids(&client, &mut entries).await;
+        update_ingest_ids(&client, &mut entries, &[0, 1]).await;
 
         let patch = json!({
             "ingestId": [
@@ -527,7 +527,7 @@ pub(crate) mod tests {
         )
         .await;
 
-        update_ingest_ids(&client, &mut entries).await;
+        update_ingest_ids(&client, &mut entries, &[0, 1]).await;
 
         let patch = json!({
             "ingestId": [
@@ -894,10 +894,14 @@ pub(crate) mod tests {
         }
     }
 
-    pub(crate) async fn update_ingest_ids(client: &Client, entries: &mut Entries) {
-        for i in [0, 1] {
+    pub(crate) async fn update_ingest_ids(
+        client: &Client,
+        entries: &mut Entries,
+        indices: &[usize],
+    ) {
+        for i in indices {
             let mut model: s3_object::ActiveModel =
-                entries.s3_objects[i].clone().into_active_model();
+                entries.s3_objects[*i].clone().into_active_model();
             model.ingest_id = Set(None);
             model.update(client.connection_ref()).await.unwrap();
         }

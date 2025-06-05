@@ -46,13 +46,8 @@ pub struct UpdateIngestIdParams {
 /// records are updated. Note, that "add" is allowed to replace existing paths in the attributes. Use
 /// `attributes` to update attributes and `ingestId` to update the ingest id.
 ///
-/// When updating the `ingestId`, the `updateTag` option can set to `current` or `live` to update
-/// tags on S3. If using `current` mode, tags are updated on S3 only if the record is current, and
-/// if using `live` mode, tags are updated if the object exists in S3 even if this is a non-current
-/// record. E.g. a query could choose to update the `ingestId` for a non-current record, and have
-/// that also update tags on S3 if that object exists. This implies that there is another record
-/// which reflects the current state of the object but it wasn't the record targetting in this query.
-/// In general, prefer `current` mode unless there is a requirement not to.
+/// When updating the `ingestId`, the `updateTag` option can set to also update tags on S3. Tags are
+/// updated on S3 only if the record is current.
 #[derive(Debug, Deserialize, Clone, ToSchema)]
 #[serde(untagged)]
 #[schema(

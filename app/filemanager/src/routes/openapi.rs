@@ -89,6 +89,7 @@ pub struct Uuid(pub uuid::Uuid);
             Links,
             PatchBody,
             Patch,
+            UpdateTagKind,
             Join,
             FilterJoin<Wildcard>,
             FilterJoin<StorageClass>,

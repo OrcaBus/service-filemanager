@@ -12,12 +12,11 @@ use sea_orm::{
     QueryFilter, QueryTrait, StatementBuilder, Value,
 };
 use serde_json::json;
-use std::str::FromStr;
 use uuid::Uuid;
 
 use crate::database::entities::s3_object;
 use crate::error::Error::{InvalidQuery, QueryError};
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::queries::list::ListQueryBuilder;
 use crate::routes::filter::S3ObjectsFilter;
 use crate::routes::update::PatchBody;
@@ -181,45 +180,8 @@ where
     }
 
     /// Create an update for the ingestId column.
-    fn patch_for_ingest_id(patch_body: Vec<PatchOperation>) -> Result<Value> {
-        if patch_body.len() != 1 {
-            return Err(QueryError(
-                "expected one patch operation for `ingestId` update".to_string(),
-            ));
-        }
-        if patch_body[0].path() != "/" {
-            return Err(QueryError(
-                "expected `/` path for `ingestId` update".to_string(),
-            ));
-        }
-
-        let parse_uuid = |value: &serde_json::Value| {
-            let uuid = Uuid::from_str(value.as_str().ok_or_else(|| {
-                QueryError("expected string value for `ingestId` update".to_string())
-            })?)
-            .map_err(|err| {
-                QueryError(format!(
-                    "failed to parse UUID for `ingestId` update: {}",
-                    err
-                ))
-            })?;
-
-            Ok::<_, Error>(Value::Uuid(Some(Box::new(uuid))))
-        };
-
-        let to_update = match &patch_body[0] {
-            PatchOperation::Add(add) => parse_uuid(&add.value)?,
-            PatchOperation::Remove(_) => Value::Uuid(None),
-            PatchOperation::Replace(replace) => parse_uuid(&replace.value)?,
-            _ => {
-                return Err(QueryError(
-                    "expected `add`, `remove` or `replace` operation for `ingestId` update"
-                        .to_string(),
-                ))
-            }
-        };
-
-        Ok(to_update)
+    fn patch_for_ingest_id(patch: &PatchBody) -> Result<Value> {
+        Ok(Value::Uuid(patch.extract_ingest_id()?.map(Box::new)))
     }
 
     /// Update the attributes on an object using the attribute patch. This first queries the
@@ -262,10 +224,9 @@ where
                     return Err(QueryError("expected uuid id column".to_string()));
                 };
 
-                let update = match patch_body.clone() {
-                    PatchBody::NestedIngestId { ingest_id } => {
-                        Self::patch_for_ingest_id(ingest_id.into_inner().0)?
-                    }
+                let patch = patch_body.clone();
+                let update = match patch {
+                    PatchBody::NestedIngestId { .. } => Self::patch_for_ingest_id(&patch)?,
                     PatchBody::UnnestedAttributes(attributes)
                     | PatchBody::NestedAttributes { attributes } => {
                         Self::patch_for_attributes(attributes.into_inner().0, update_col, model)?

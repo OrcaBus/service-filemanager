@@ -1,21 +1,41 @@
-use axum::extract::State;
-use axum::routing::patch;
-use axum::{extract, Router};
-use axum_extra::extract::WithRejection;
-use sea_orm::TransactionTrait;
-use serde::Deserialize;
-use utoipa::ToSchema;
-use uuid::Uuid;
-
+use crate::clients::aws::s3::Client;
 use crate::database::entities::s3_object;
 use crate::database::entities::s3_object::Model as S3;
-use crate::error::Error::ExpectedSomeValue;
-use crate::error::Result;
+use crate::env::Config;
+use crate::error::Error::{ExpectedSomeValue, QueryError};
+use crate::error::{Error, Result};
 use crate::queries::update::UpdateQueryBuilder;
 use crate::routes::error::{ErrorStatusCode, Json, Path, QsQuery, Query};
 use crate::routes::filter::S3ObjectsFilter;
 use crate::routes::list::{ListS3Params, WildcardParams};
 use crate::routes::AppState;
+use aws_sdk_s3::types::{Tag, Tagging};
+use axum::extract::State;
+use axum::routing::patch;
+use axum::{extract, Router};
+use axum_extra::extract::WithRejection;
+use json_patch::PatchOperation;
+use sea_orm::TransactionTrait;
+use serde::{Deserialize, Serialize};
+use std::str::FromStr;
+use utoipa::{IntoParams, ToSchema};
+use uuid::Uuid;
+
+/// Params for an update ingestId request.
+#[derive(Debug, Serialize, Deserialize, Default, IntoParams)]
+#[serde(default, rename_all = "camelCase")]
+#[into_params(parameter_in = Query)]
+pub struct UpdateIngestIdParams {
+    /// When updating the `ingestId`, the `updateTag` option can set to update `ingestId` tag
+    /// on S3 as well. By default, the S3 tag is not updated. This option allows updating the
+    /// tag if the record being updated is current. Note, that the S3 tags will not be updated
+    /// if updating the `ingestId` on a non-current record even if this option is set. To update
+    /// S3 tags, the query should be working with records that have `isCurrentState` set to true.
+    /// If using list-based `ingestId` update queries and this option is set, the tags will only
+    /// be updated for those records that have `isCurrentState` set to true.
+    #[param(nullable = false, required = false, default = false)]
+    update_tag: bool,
+}
 
 /// The attributes to update for the request. This updates attributes according to JSON patch.
 /// See [JSON patch](https://jsonpatch.com/) and [RFC6902](https://datatracker.ietf.org/doc/html/rfc6902/).
@@ -25,6 +45,9 @@ use crate::routes::AppState;
 /// a patch operations that isn't "add", "copy" or "test" is used, a `BAD_REQUEST` is returned and no
 /// records are updated. Note, that "add" is allowed to replace existing paths in the attributes. Use
 /// `attributes` to update attributes and `ingestId` to update the ingest id.
+///
+/// When updating the `ingestId`, the `updateTag` option can set to also update tags on S3. Tags are
+/// updated on S3 only if the record is current.
 #[derive(Debug, Deserialize, Clone, ToSchema)]
 #[serde(untagged)]
 #[schema(
@@ -98,6 +121,92 @@ impl PatchBody {
             PatchBody::UnnestedAttributes(attributes) => &attributes.0,
         }
     }
+
+    /// Extract the ingest id if this is an ingest id patch.
+    pub fn extract_ingest_id(&self) -> Result<Option<Uuid>> {
+        let inner = self.get_ref();
+        if inner.0.len() != 1 {
+            return Err(QueryError(
+                "expected one patch operation for `ingestId` update".to_string(),
+            ));
+        }
+        if inner.0[0].path() != "/" {
+            return Err(QueryError(
+                "expected `/` path for `ingestId` update".to_string(),
+            ));
+        }
+
+        let parse_uuid = |value: &serde_json::Value| {
+            let uuid = Uuid::from_str(value.as_str().ok_or_else(|| {
+                QueryError("expected string value for `ingestId` update".to_string())
+            })?)
+            .map_err(|err| {
+                QueryError(format!(
+                    "failed to parse UUID for `ingestId` update: {}",
+                    err
+                ))
+            })?;
+
+            Ok::<_, Error>(uuid)
+        };
+
+        let to_update = match &inner.0[0] {
+            PatchOperation::Add(add) => Some(parse_uuid(&add.value)?),
+            PatchOperation::Remove(_) => None,
+            PatchOperation::Replace(replace) => Some(parse_uuid(&replace.value)?),
+            _ => {
+                return Err(QueryError(
+                    "expected `add`, `remove` or `replace` operation for `ingestId` update"
+                        .to_string(),
+                ))
+            }
+        };
+
+        Ok(to_update)
+    }
+
+    /// Updates the tags in S3 with the specific ingest id.
+    pub async fn update_s3_tag(
+        client: &Client,
+        config: &Config,
+        model: &s3_object::Model,
+        ingest_id: Uuid,
+    ) -> Result<()> {
+        client
+            .put_object_tagging(
+                &model.key,
+                &model.bucket,
+                &model.version_id,
+                Tagging::builder()
+                    .tag_set(
+                        Tag::builder()
+                            .key(config.ingester_tag_name())
+                            .value(ingest_id)
+                            .build()?,
+                    )
+                    .build()?,
+            )
+            .await?;
+
+        Ok(())
+    }
+}
+
+/// Update the S3 `ingestId` tags according to the params.
+pub async fn update_s3_tags(
+    state: &State<AppState>,
+    params: &UpdateIngestIdParams,
+    ingest_id: Option<Uuid>,
+    model: &s3_object::Model,
+) -> Result<()> {
+    match ingest_id {
+        Some(ingest_id) if params.update_tag && model.is_current_state => {
+            PatchBody::update_s3_tag(state.s3_client(), state.config(), model, ingest_id).await?;
+        }
+        _ => {}
+    }
+
+    Ok(())
 }
 
 /// Update the s3_object attributes using a JSON patch request.
@@ -112,6 +221,7 @@ impl PatchBody {
         ),
         ErrorStatusCode,
     ),
+    params(UpdateIngestIdParams),
     request_body = PatchBody,
     context_path = "/api/v1",
     tag = "update",
@@ -119,11 +229,17 @@ impl PatchBody {
 pub async fn update_s3_attributes(
     state: State<AppState>,
     WithRejection(extract::Path(id), _): Path<Uuid>,
+    WithRejection(extract::Query(ingest_id_params), _): Query<UpdateIngestIdParams>,
     WithRejection(extract::Json(patch), _): Json<PatchBody>,
 ) -> Result<extract::Json<S3>> {
     let txn = state.database_client().connection_ref().begin().await?;
 
-    let results = UpdateQueryBuilder::<_, s3_object::Entity>::new(&txn)
+    let ingest_id = match patch {
+        PatchBody::NestedIngestId { .. } => patch.extract_ingest_id()?,
+        _ => None,
+    };
+
+    let result = UpdateQueryBuilder::<_, s3_object::Entity>::new(&txn)
         .for_id(id)
         .update_s3_attributes(patch)
         .await?
@@ -131,9 +247,11 @@ pub async fn update_s3_attributes(
         .await?
         .ok_or_else(|| ExpectedSomeValue(id))?;
 
+    update_s3_tags(&state, &ingest_id_params, ingest_id, &result).await?;
+
     txn.commit().await?;
 
-    Ok(extract::Json(results))
+    Ok(extract::Json(result))
 }
 
 /// Update the attributes for a collection of s3_objects using a JSON patch request.
@@ -149,7 +267,7 @@ pub async fn update_s3_attributes(
         ),
         ErrorStatusCode,
     ),
-    params(WildcardParams, ListS3Params, S3ObjectsFilter),
+    params(WildcardParams, ListS3Params, S3ObjectsFilter, UpdateIngestIdParams),
     request_body = PatchBody,
     context_path = "/api/v1",
     tag = "update",
@@ -159,9 +277,15 @@ pub async fn update_s3_collection_attributes(
     WithRejection(extract::Query(wildcard), _): Query<WildcardParams>,
     WithRejection(extract::Query(list), _): Query<ListS3Params>,
     WithRejection(serde_qs::axum::QsQuery(filter_all), _): QsQuery<S3ObjectsFilter>,
+    WithRejection(extract::Query(ingest_id_params), _): Query<UpdateIngestIdParams>,
     WithRejection(extract::Json(patch), _): Json<PatchBody>,
 ) -> Result<extract::Json<Vec<S3>>> {
     let txn = state.database_client().connection_ref().begin().await?;
+
+    let ingest_id = match patch {
+        PatchBody::NestedIngestId { .. } => patch.extract_ingest_id()?,
+        _ => None,
+    };
 
     let results = UpdateQueryBuilder::<_, s3_object::Entity>::new(&txn).filter_all(
         filter_all,
@@ -170,6 +294,10 @@ pub async fn update_s3_collection_attributes(
     )?;
 
     let results = results.update_s3_attributes(patch).await?.all().await?;
+
+    for result in &results {
+        update_s3_tags(&state, &ingest_id_params, ingest_id, result).await?;
+    }
 
     txn.commit().await?;
 
@@ -191,7 +319,9 @@ mod tests {
     use serde_json::Value;
     use sqlx::PgPool;
 
+    use super::*;
     use crate::database::aws::migration::tests::MIGRATOR;
+    use crate::events::aws::collecter::tests::mock_s3;
     use crate::queries::update::tests::{assert_contains, entries_many};
     use crate::queries::update::tests::{
         assert_correct_records, assert_model_contains, assert_wildcard_update,
@@ -200,8 +330,9 @@ mod tests {
     use crate::queries::EntriesBuilder;
     use crate::routes::list::tests::response_from;
     use crate::uuid::UuidGenerator;
-
-    use super::*;
+    use aws_sdk_s3::operation::put_object_tagging::PutObjectTaggingOutput;
+    use aws_smithy_mocks_experimental::mock;
+    use std::sync::Arc;
 
     #[sqlx::test(migrator = "MIGRATOR")]
     async fn update_attribute_api_unsupported(pool: PgPool) {
@@ -432,7 +563,7 @@ mod tests {
         });
 
         change_many(client, &entries, &[0, 1], Some(json!({"attributeId": "1"}))).await;
-        update_ingest_ids(client, &mut entries).await;
+        update_ingest_ids(client, &mut entries, &[0, 1]).await;
 
         let (_, s3_objects) = response_from::<Vec<S3>>(
             state.clone(),
@@ -457,7 +588,7 @@ mod tests {
         let mut entries = EntriesBuilder::default().build(client).await.unwrap();
 
         change_many(client, &entries, &[0, 1], Some(json!({"attributeId": "1"}))).await;
-        update_ingest_ids(client, &mut entries).await;
+        update_ingest_ids(client, &mut entries, &[0, 1]).await;
 
         let patch = json!({
             "ingestId": [
@@ -532,7 +663,7 @@ mod tests {
 
         change_many(client, &entries, &[0, 1], Some(json!({"attributeId": "1"}))).await;
 
-        update_ingest_ids(client, &mut entries).await;
+        update_ingest_ids(client, &mut entries, &[0, 1]).await;
 
         let patch = json!({
             "ingestId": [
@@ -764,5 +895,146 @@ mod tests {
 
         assert_wildcard_update(&mut entries, &s3_objects);
         assert_correct_records(state.database_client(), entries).await;
+    }
+
+    #[sqlx::test(migrator = "MIGRATOR")]
+    async fn update_ingest_id_list_s3_tags_non_current(pool: PgPool) {
+        let mut state = AppState::from_pool(pool).await.unwrap();
+
+        state.s3_client = Arc::new(mock_s3(&[]));
+
+        let client = state.database_client();
+        let mut entries = EntriesBuilder::default().build(client).await.unwrap();
+
+        let patch = json!({
+            "ingestId": [
+                { "op": "add", "path": "/", "value": "00000000-0000-0000-0000-000000000000" },
+            ]
+        });
+
+        // The ingest_id should be updated but there should be no update to S3 if the record is
+        // not current.
+        response_from::<Vec<S3>>(
+            state.clone(),
+            "/s3?attributes[attributeId]=1&currentState=false&updateTag=true",
+            Method::PATCH,
+            Body::new(patch.to_string()),
+        )
+        .await;
+        entries.s3_objects[1].ingest_id = Some(Uuid::default());
+
+        assert_correct_records(client, entries).await;
+    }
+
+    #[sqlx::test(migrator = "MIGRATOR")]
+    async fn update_ingest_id_s3_tags_non_current(pool: PgPool) {
+        let mut state = AppState::from_pool(pool).await.unwrap();
+
+        state.s3_client = Arc::new(mock_s3(&[]));
+
+        let client = state.database_client();
+        let mut entries = EntriesBuilder::default().build(client).await.unwrap();
+
+        let patch = json!({
+            "ingestId": [
+                { "op": "add", "path": "/", "value": "00000000-0000-0000-0000-000000000000" },
+            ]
+        });
+
+        // The ingest_id should be updated but there should be no update to S3 if the record is
+        // not current.
+        response_from::<S3>(
+            state.clone(),
+            &format!("/s3/{}", entries.s3_objects[1].s3_object_id),
+            Method::PATCH,
+            Body::new(patch.to_string()),
+        )
+        .await;
+        entries.s3_objects[1].ingest_id = Some(Uuid::default());
+
+        assert_correct_records(client, entries).await;
+    }
+
+    #[sqlx::test(migrator = "MIGRATOR")]
+    async fn update_ingest_id_list_s3_tags_current(pool: PgPool) {
+        let mut state = AppState::from_pool(pool).await.unwrap();
+
+        state.s3_client = Arc::new(mock_put_object_tagging());
+
+        let client = state.database_client();
+        let mut entries = EntriesBuilder::default().build(client).await.unwrap();
+
+        let patch = json!({
+            "ingestId": [
+                { "op": "add", "path": "/", "value": "00000000-0000-0000-0000-000000000000" },
+            ]
+        });
+
+        change_many(client, &entries, &[2], Some(json!({"attributeId": "2"}))).await;
+        update_ingest_ids(client, &mut entries, &[2]).await;
+
+        // The ingest_id should be updated and there should be an update to the tags in S3.
+        let (_, s3_objects) = response_from::<Vec<S3>>(
+            state.clone(),
+            "/s3?attributes[attributeId]=2&updateTag=true",
+            Method::PATCH,
+            Body::new(patch.to_string()),
+        )
+        .await;
+
+        entries_many(&mut entries, &[2], json!({"attributeId": "2"}));
+        entries.s3_objects[2].ingest_id = Some(Uuid::default());
+
+        assert_contains(&s3_objects, &entries, 2..3);
+        assert_correct_records(client, entries).await;
+    }
+
+    #[sqlx::test(migrator = "MIGRATOR")]
+    async fn update_ingest_id_s3_tags_current(pool: PgPool) {
+        let mut state = AppState::from_pool(pool).await.unwrap();
+
+        state.s3_client = Arc::new(mock_put_object_tagging());
+
+        let client = state.database_client();
+        let mut entries = EntriesBuilder::default().build(client).await.unwrap();
+
+        let patch = json!({
+            "ingestId": [
+                { "op": "add", "path": "/", "value": "00000000-0000-0000-0000-000000000000" },
+            ]
+        });
+
+        change_many(client, &entries, &[2], Some(json!({"attributeId": "2"}))).await;
+        update_ingest_ids(client, &mut entries, &[2]).await;
+
+        // The ingest_id should be updated and there should be an update to the tags in S3.
+        let (_, s3_objects) = response_from::<S3>(
+            state.clone(),
+            &format!("/s3/{}", entries.s3_objects[2].s3_object_id),
+            Method::PATCH,
+            Body::new(patch.to_string()),
+        )
+        .await;
+
+        entries_many(&mut entries, &[2], json!({"attributeId": "2"}));
+        entries.s3_objects[2].ingest_id = Some(Uuid::default());
+
+        assert_contains(&vec![s3_objects], &entries, 2..3);
+        assert_correct_records(client, entries).await;
+    }
+
+    fn mock_put_object_tagging() -> Client {
+        mock_s3(&[mock!(aws_sdk_s3::Client::put_object_tagging)
+            .match_requests(move |req| {
+                req.key() == Some("2")
+                    && req.bucket() == Some("1")
+                    && req.version_id() == Some("2")
+                    && req.tagging().is_some_and(|t| {
+                        t.tag_set().first().unwrap().key() == "ingest_id"
+                            && t.tag_set().first().unwrap().value()
+                                == "00000000-0000-0000-0000-000000000000"
+                    })
+            })
+            .then_output(move || PutObjectTaggingOutput::builder().version_id("2").build())])
     }
 }

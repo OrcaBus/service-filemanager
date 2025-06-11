@@ -1,5 +1,4 @@
 import { FileManagerStatelessConfig } from './filemanager-stateless-stack';
-import { StageName } from '@orcabus/platform-cdk-constructs/utils';
 import { getDefaultApiGatewayConfiguration } from '@orcabus/platform-cdk-constructs/api-gateway';
 import { Function } from './functions/function';
 import { EventSourceProps } from '../components/event-source';
@@ -12,23 +11,26 @@ import {
   fileManagerPresignUser,
   fileManagerPresignUserSecret,
 } from '@orcabus/platform-cdk-constructs/shared-config/file-manager';
+import { StageName } from '@orcabus/platform-cdk-constructs/shared-config/accounts';
+import { EVENT_SOURCE_QUEUE_NAME } from './constants';
 import {
-  computeSecurityGroupName,
-  databasePort,
-  dbClusterEndpointHostParameterName,
-  eventSourceQueueName,
-  vpcProps,
-} from './constants';
+  SHARED_SECURITY_GROUP_NAME,
+  VPC_LOOKUP_PROPS,
+} from '@orcabus/platform-cdk-constructs/shared-config/networking';
+import {
+  DATABASE_PORT,
+  DB_CLUSTER_ENDPOINT_HOST_PARAMETER_NAME,
+} from '@orcabus/platform-cdk-constructs/shared-config/database';
 
 export const getFileManagerStatelessProps = (stage: StageName): FileManagerStatelessConfig => {
   const buckets = [...fileManagerBuckets[stage], ...fileManagerCacheBuckets[stage]];
 
   return {
-    securityGroupName: computeSecurityGroupName,
-    vpcProps,
-    eventSourceQueueName,
-    databaseClusterEndpointHostParameter: dbClusterEndpointHostParameterName,
-    port: databasePort,
+    securityGroupName: SHARED_SECURITY_GROUP_NAME,
+    vpcProps: VPC_LOOKUP_PROPS,
+    eventSourceQueueName: EVENT_SOURCE_QUEUE_NAME,
+    databaseClusterEndpointHostParameter: DB_CLUSTER_ENDPOINT_HOST_PARAMETER_NAME,
+    port: DATABASE_PORT,
     migrateDatabase: true,
     accessKeySecretArn: accessKeySecretArn[stage],
     inventorySourceBuckets: buckets,
@@ -82,7 +84,7 @@ export const getEventSourceConstructProps = (stage: StageName): EventSourceProps
   ];
 
   const props: EventSourceProps = {
-    queueName: eventSourceQueueName,
+    queueName: EVENT_SOURCE_QUEUE_NAME,
     maxReceiveCount: 3,
     rules: [],
   };

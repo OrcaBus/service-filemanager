@@ -569,6 +569,7 @@ pub(crate) mod tests {
             .with_bucket_divisor(4)
             .with_key_divisor(3)
             .with_shuffle(true)
+            .with_generate_crawl_entries(false)
             .build(&client)
             .await
             .unwrap()
@@ -590,6 +591,7 @@ pub(crate) mod tests {
             .with_bucket_divisor(8)
             .with_key_divisor(5)
             .with_shuffle(true)
+            .with_generate_crawl_entries(false)
             .build(&client)
             .await
             .unwrap()
@@ -613,6 +615,7 @@ pub(crate) mod tests {
             .with_bucket_divisor(4)
             .with_key_divisor(3)
             .with_shuffle(true)
+            .with_generate_crawl_entries(false)
             .build(&client)
             .await
             .unwrap()
@@ -647,6 +650,7 @@ pub(crate) mod tests {
             .with_bucket_divisor(8)
             .with_key_divisor(5)
             .with_shuffle(true)
+            .with_generate_crawl_entries(false)
             .build(&client)
             .await
             .unwrap()

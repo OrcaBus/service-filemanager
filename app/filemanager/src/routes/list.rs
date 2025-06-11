@@ -376,7 +376,7 @@ pub fn list_router() -> Router<AppState> {
 pub(crate) mod tests {
     use aws_sdk_s3::operation::get_object::GetObjectOutput;
     use aws_sdk_s3::primitives::ByteStream;
-    use aws_smithy_mocks_experimental::{mock, mock_client, Rule, RuleMode};
+    use aws_smithy_mocks::{mock, mock_client, Rule, RuleMode};
     use axum::body::to_bytes;
     use axum::body::Body;
     use axum::http::header::{CONTENT_TYPE, HOST};
@@ -426,6 +426,7 @@ pub(crate) mod tests {
             .with_bucket_divisor(4)
             .with_key_divisor(3)
             .with_shuffle(true)
+            .with_generate_crawl_entries(false)
             .build(state.database_client())
             .await
             .unwrap()
@@ -457,6 +458,7 @@ pub(crate) mod tests {
             .with_bucket_divisor(4)
             .with_key_divisor(3)
             .with_shuffle(true)
+            .with_generate_crawl_entries(false)
             .build(state.database_client())
             .await
             .unwrap()
@@ -491,6 +493,7 @@ pub(crate) mod tests {
             .with_bucket_divisor(4)
             .with_key_divisor(3)
             .with_shuffle(true)
+            .with_generate_crawl_entries(false)
             .build(state.database_client())
             .await
             .unwrap()
@@ -532,6 +535,7 @@ pub(crate) mod tests {
             .with_bucket_divisor(4)
             .with_key_divisor(3)
             .with_shuffle(true)
+            .with_generate_crawl_entries(false)
             .build(state.database_client())
             .await
             .unwrap();
@@ -589,6 +593,7 @@ pub(crate) mod tests {
             .with_bucket_divisor(4)
             .with_key_divisor(3)
             .with_shuffle(true)
+            .with_generate_crawl_entries(false)
             .build(state.database_client())
             .await
             .unwrap();
@@ -630,6 +635,7 @@ pub(crate) mod tests {
             .with_bucket_divisor(4)
             .with_key_divisor(3)
             .with_shuffle(true)
+            .with_generate_crawl_entries(false)
             .build(state.database_client())
             .await
             .unwrap();
@@ -651,6 +657,7 @@ pub(crate) mod tests {
             .with_n(30)
             .with_bucket_divisor(8)
             .with_key_divisor(5)
+            .with_generate_crawl_entries(false)
             .build(state.database_client())
             .await
             .unwrap()
@@ -1083,6 +1090,7 @@ pub(crate) mod tests {
             .with_bucket_divisor(4)
             .with_key_divisor(3)
             .with_shuffle(true)
+            .with_generate_crawl_entries(false)
             .build(state.database_client())
             .await
             .unwrap();

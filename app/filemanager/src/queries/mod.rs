@@ -18,8 +18,8 @@ use crate::events::aws;
 use crate::events::aws::{message, FlatS3EventMessage, FlatS3EventMessages};
 use crate::uuid::UuidGenerator;
 use chrono::{DateTime, Days};
+use rand::rng;
 use rand::seq::SliceRandom;
-use rand::thread_rng;
 use sea_orm::{ActiveModelTrait, Set, TryIntoModel, Unchanged};
 use serde_json::json;
 use strum::EnumCount;
@@ -36,12 +36,12 @@ pub struct Entries {
     pub s3_crawl: Vec<S3Crawl>,
 }
 
-impl From<Vec<(S3Object, S3Crawl)>> for Entries {
-    fn from(objects: Vec<(S3Object, S3Crawl)>) -> Self {
-        let (s3_objects, s3_crawl) = objects.into_iter().unzip();
+impl From<Vec<(S3Object, Option<S3Crawl>)>> for Entries {
+    fn from(objects: Vec<(S3Object, Option<S3Crawl>)>) -> Self {
+        let (s3_objects, s3_crawl): (Vec<_>, Vec<Option<_>>) = objects.into_iter().unzip();
         Self {
             s3_objects,
-            s3_crawl,
+            s3_crawl: s3_crawl.into_iter().flatten().collect(),
         }
     }
 }
@@ -51,7 +51,7 @@ impl Entries {
     pub async fn initialize_database(
         client: &Client,
         builder: EntriesBuilder,
-    ) -> Result<Vec<(S3Object, S3Crawl)>> {
+    ) -> Result<Vec<(S3Object, Option<S3Crawl>)>> {
         let mut output = vec![];
 
         let mut entries: Vec<(_, _, _)> = (0..builder.n)
@@ -77,14 +77,19 @@ impl Entries {
                     builder.prefixes.get(&index).map(|k| k.as_str()),
                     builder.suffixes.get(&index).map(|k| k.as_str()),
                 );
-                let crawl_entry = Self::generate_crawl_entry(
-                    index,
-                    (builder.bucket_divisor, builder.key_divisor),
-                    uuid,
-                    builder.values.get(&index).map(|k| k.to_string()),
-                    builder.prefixes.get(&index).map(|k| k.as_str()),
-                    builder.suffixes.get(&index).map(|k| k.as_str()),
-                );
+
+                let crawl_entry = if builder.generate_crawl_entries {
+                    Some(Self::generate_crawl_entry(
+                        index,
+                        (builder.bucket_divisor, builder.key_divisor),
+                        uuid,
+                        builder.values.get(&index).map(|k| k.to_string()),
+                        builder.prefixes.get(&index).map(|k| k.as_str()),
+                        builder.suffixes.get(&index).map(|k| k.as_str()),
+                    ))
+                } else {
+                    None
+                };
 
                 if let Some(ref reason) = builder.reason {
                     entry.reason = Set(reason.clone());
@@ -97,7 +102,7 @@ impl Entries {
             .collect();
 
         if builder.shuffle {
-            entries.shuffle(&mut thread_rng());
+            entries.shuffle(&mut rng());
         }
 
         for (s3_object, message, crawl) in entries {
@@ -105,8 +110,13 @@ impl Entries {
                 .ingest_events(FlatS3EventMessages(vec![message]).into())
                 .await?;
 
-            crawl.clone().insert(client.connection_ref()).await?;
-            output.push((s3_object.try_into_model()?, crawl.try_into_model()?));
+            if let Some(ref crawl) = crawl {
+                crawl.clone().insert(client.connection_ref()).await?;
+            }
+            output.push((
+                s3_object.try_into_model()?,
+                crawl.map(|crawl| crawl.try_into_model()).transpose()?,
+            ));
         }
 
         Ok(output)
@@ -132,7 +142,7 @@ impl Entries {
         Ok(Self::initialize_database(client, builder)
             .await?
             .into_iter()
-            .map(|(_, crawl)| crawl)
+            .filter_map(|(_, crawl)| crawl)
             .collect())
     }
 
@@ -281,6 +291,7 @@ pub struct EntriesBuilder {
     pub(crate) prefixes: HashMap<usize, String>,
     pub(crate) suffixes: HashMap<usize, String>,
     pub(crate) reason: Option<Reason>,
+    pub(crate) generate_crawl_entries: bool,
 }
 
 impl EntriesBuilder {
@@ -308,7 +319,13 @@ impl EntriesBuilder {
         self
     }
 
-    /// Set whether to shuffle.
+    /// Set whether to generate crawl entries.
+    pub fn with_generate_crawl_entries(mut self, generate_crawl_entries: bool) -> Self {
+        self.generate_crawl_entries = generate_crawl_entries;
+        self
+    }
+
+    /// Set the ingest id.
     pub fn with_ingest_id(mut self, ingest_id: Uuid) -> Self {
         self.ingest_id = Some(ingest_id);
         self
@@ -361,6 +378,7 @@ impl Default for EntriesBuilder {
             prefixes: Default::default(),
             suffixes: Default::default(),
             reason: None,
+            generate_crawl_entries: true,
         }
     }
 }

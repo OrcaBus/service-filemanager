@@ -574,7 +574,7 @@ pub(crate) mod tests {
     use crate::events::aws::tests::EXPECTED_E_TAG;
     use aws_sdk_s3::operation::get_object::GetObjectOutput;
     use aws_sdk_s3::primitives::ByteStream;
-    use aws_smithy_mocks_experimental::{mock, Rule};
+    use aws_smithy_mocks::{mock, Rule};
     use chrono::Days;
     use flate2::read::GzEncoder;
     use serde_json::json;

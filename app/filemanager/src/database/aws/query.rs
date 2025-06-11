@@ -61,7 +61,7 @@ impl Query {
     }
 
     /// Start a new transaction.
-    pub async fn transaction(&self) -> Result<Transaction<Postgres>> {
+    pub async fn transaction(&self) -> Result<Transaction<'_, Postgres>> {
         Ok(self.client.pool().begin().await?)
     }
 }

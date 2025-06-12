@@ -81,11 +81,11 @@ jobs:
       - uses: mlugg/setup-zig@v2
       - run: curl -fsSL https://cargo-lambda.info/install.sh | sh
 
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22.x'
           cache: 'pnpm'
-      - uses: pnpm/action-setup@v4
 
       - run: corepack enable
       - run: pnpm install --frozen-lockfile --ignore-scripts

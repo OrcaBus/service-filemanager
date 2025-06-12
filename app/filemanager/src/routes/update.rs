@@ -331,7 +331,7 @@ mod tests {
     use crate::routes::list::tests::response_from;
     use crate::uuid::UuidGenerator;
     use aws_sdk_s3::operation::put_object_tagging::PutObjectTaggingOutput;
-    use aws_smithy_mocks_experimental::mock;
+    use aws_smithy_mocks::mock;
     use std::sync::Arc;
 
     #[sqlx::test(migrator = "MIGRATOR")]

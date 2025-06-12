@@ -236,7 +236,7 @@ pub(crate) mod tests {
     use crate::clients::aws::s3;
     use crate::env::Config;
     use crate::routes::list::tests::mock_get_object;
-    use aws_smithy_mocks_experimental::{mock_client, RuleMode};
+    use aws_smithy_mocks::{mock_client, RuleMode};
     use chrono::Duration;
     use sqlx::PgPool;
 

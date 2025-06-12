@@ -5,9 +5,9 @@ import { Architecture, Version } from 'aws-cdk-lib/aws-lambda';
 import { ManagedPolicy, PolicyStatement, Role } from 'aws-cdk-lib/aws-iam';
 import { RustFunction } from 'cargo-lambda-cdk';
 import path from 'path';
-import { FILEMANAGER_SERVICE_NAME, rdsPolicyName } from '../constants';
-import { NamedLambdaRole } from '../../components/named-lambda-role';
+import { FILEMANAGER_SERVICE_NAME, RDS_POLICY_NAME } from '../constants';
 import { spawnSync } from 'node:child_process';
+import { NamedLambdaRole } from '@orcabus/platform-cdk-constructs/named-lambda-role';
 
 /**
  * Properties for the database.
@@ -87,7 +87,7 @@ export class Function extends Construct {
     // Lambda needs VPC access if it is created in a VPC.
     this.addAwsManagedPolicy('service-role/AWSLambdaVPCAccessExecutionRole');
     // Using RDS IAM credentials, so we add the managed policy created by the postgres manager.
-    this.addCustomerManagedPolicy(rdsPolicyName);
+    this.addCustomerManagedPolicy(RDS_POLICY_NAME);
 
     // Lambda needs to be able to reach out to access S3, security manager, etc.
     // Could this use an endpoint instead?

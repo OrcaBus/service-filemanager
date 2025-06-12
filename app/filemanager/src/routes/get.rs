@@ -153,7 +153,7 @@ pub fn get_router() -> Router<AppState> {
 
 #[cfg(test)]
 mod tests {
-    use aws_smithy_mocks_experimental::{mock_client, RuleMode};
+    use aws_smithy_mocks::{mock_client, RuleMode};
     use axum::body::Body;
     use axum::http::{Method, StatusCode};
     use serde_json::Value;
@@ -347,6 +347,7 @@ mod tests {
         let entries = EntriesBuilder::default()
             .with_bucket_divisor(4)
             .with_key_divisor(3)
+            .with_generate_crawl_entries(false)
             .with_shuffle(true)
             .build(state.database_client())
             .await

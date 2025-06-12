@@ -21,8 +21,8 @@ import {
   OrcaBusApiGateway,
   OrcaBusApiGatewayProps,
 } from '@orcabus/platform-cdk-constructs/api-gateway';
-import { NamedLambdaRole } from '../components/named-lambda-role';
-import { ProviderFunction } from '../components/provider-function';
+import { ProviderFunction } from '@orcabus/platform-cdk-constructs/provider-function';
+import { NamedLambdaRole } from '@orcabus/platform-cdk-constructs/named-lambda-role';
 
 /**
  * Stateful config for filemanager.

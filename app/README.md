@@ -132,7 +132,6 @@ The project is divided into multiple crates that serve different functionality.
 * [filemanager-ingest-lambda]: This is a Lambda function which ingests events directly passed from an SQS queue.
 * [filemanager-inventory-lambda]: This function ingests events using [S3 Inventory][inventory].
 * [filemanager-migrate-lambda]: A Lambda function to apply database migrations.
-* [deploy]: CDK deployment code.
 * [database]: Database migration files and queries.
 
 [architecture]: docs/ARCHITECTURE.md
@@ -145,5 +144,4 @@ The project is divided into multiple crates that serve different functionality.
 [filemanager-inventory-lambda]: filemanager-inventory-lambda
 [filemanager-migrate-lambda]: filemanager-migrate-lambda
 [inventory]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/storage-inventory.html
-[deploy]: deploy
 [database]: database

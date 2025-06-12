@@ -391,9 +391,9 @@ impl Collect for Collecter<'_> {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use aws_smithy_mocks_experimental::mock;
-    use aws_smithy_mocks_experimental::Rule;
-    use aws_smithy_mocks_experimental::RuleMode;
+    use aws_smithy_mocks::mock;
+    use aws_smithy_mocks::Rule;
+    use aws_smithy_mocks::RuleMode;
 
     use crate::database::aws::migration::tests::MIGRATOR;
     use crate::events::aws::tests::{
@@ -411,7 +411,7 @@ pub(crate) mod tests {
     use aws_sdk_s3::types::error::NotFound;
     use aws_sdk_sqs::operation::receive_message::ReceiveMessageOutput;
     use aws_sdk_sqs::types::builders::MessageBuilder;
-    use aws_smithy_mocks_experimental::mock_client;
+    use aws_smithy_mocks::mock_client;
     use sea_orm::prelude::Json;
     use serde_json::json;
     use sqlx::{PgPool, Row};

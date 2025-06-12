@@ -7,7 +7,7 @@ import {
   getFileManagerStatelessProps,
 } from '../infrastructure/stage/config';
 import { FileManagerStatefulStack } from '../infrastructure/stage/filemanager-stateful-stack';
-import { synthesisMessageToString } from './utils';
+import { synthesisMessageToString } from '@orcabus/platform-cdk-constructs/utils';
 
 function applyIAMWildcardSuppression(stack: Stack) {
   NagSuppressions.addResourceSuppressions(

@@ -103,8 +103,8 @@ pub(crate) mod tests {
     use crate::events::aws::tests::assert_flat_without_time;
     use crate::events::aws::tests::EXPECTED_QUOTED_E_TAG;
     use aws_sdk_s3::operation::list_object_versions::ListObjectVersionsOutput;
-    use aws_smithy_mocks_experimental::{mock, mock_client};
-    use aws_smithy_mocks_experimental::{Rule, RuleMode};
+    use aws_smithy_mocks::{mock, mock_client};
+    use aws_smithy_mocks::{Rule, RuleMode};
 
     #[tokio::test]
     async fn crawl_messages() {

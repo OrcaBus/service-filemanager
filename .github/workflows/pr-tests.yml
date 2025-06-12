@@ -41,6 +41,13 @@ jobs:
 
       - run: corepack enable
 
+      - name: Cache
+        uses: mozilla-actions/sccache-action@v0.0.8
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
       - name: TruffleHog OSS
         uses: trufflesecurity/trufflehog@v3.88.29
         with:
@@ -54,7 +61,7 @@ jobs:
           make install
       - name: Lint and code formatting
         run: |
-          make check
+          make check-all
 
   test-iac:
     runs-on: ubuntu-24.04-arm
@@ -99,8 +106,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - uses: mlugg/setup-zig@v2
-      - run: curl -fsSL https://cargo-lambda.info/install.sh | sh
 
       - name: Test
         working-directory: ./app

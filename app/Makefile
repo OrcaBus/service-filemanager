@@ -61,6 +61,7 @@ clippy: docker-postgres entity
 	@cargo clippy --all-targets --all-features
 check: lint clippy
 check-fix: lint-fix clippy
+fix: check-fix
 
 ## Clean
 clean: docker-clean

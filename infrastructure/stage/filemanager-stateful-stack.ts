@@ -1,7 +1,7 @@
 import { Construct } from 'constructs';
 import { Stack, StackProps } from 'aws-cdk-lib';
 import { AccessKeySecret, AccessKeySecretProps } from '../components/access-key-secret';
-import { EventSourceProps } from '../components/event-source';
+import { EventSourceConstruct, EventSourceProps } from '../components/event-source';
 
 /**
  * Stateful config for filemanager.
@@ -32,6 +32,6 @@ export class FileManagerStatefulStack extends Stack {
     super(scope, id, props);
 
     this.accessKeySecret = new AccessKeySecret(this, 'AccessKey', props.accessKeyProps);
-    // new EventSourceConstruct(this, 'EventSourceConstruct', props.eventSourceProps);
+    new EventSourceConstruct(this, 'EventSourceConstruct', props.eventSourceProps);
   }
 }

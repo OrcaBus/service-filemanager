@@ -1,10 +1,9 @@
 import { FileManagerStatelessConfig } from './filemanager-stateless-stack';
 import { getDefaultApiGatewayConfiguration } from '@orcabus/platform-cdk-constructs/api-gateway';
 import { Function } from './functions/function';
-import { EventSourceProps } from '../components/event-source';
-import { FileManagerStatefulConfig } from './filemanager-stateful-stack';
+import { FileManagerStatefulConfig, IngestRules } from './filemanager-stateful-stack';
 import { StageName } from '@orcabus/platform-cdk-constructs/shared-config/accounts';
-import { EVENT_SOURCE_QUEUE_NAME } from './constants';
+import { FILEMANAGER_INGEST_QUEUE } from './constants';
 import {
   SHARED_SECURITY_GROUP_NAME,
   VPC_LOOKUP_PROPS,
@@ -29,7 +28,7 @@ export const getFileManagerStatelessProps = (stage: StageName): FileManagerState
   return {
     securityGroupName: SHARED_SECURITY_GROUP_NAME,
     vpcProps: VPC_LOOKUP_PROPS,
-    eventSourceQueueName: EVENT_SOURCE_QUEUE_NAME,
+    eventSourceQueueName: FILEMANAGER_INGEST_QUEUE,
     databaseClusterEndpointHostParameter: DB_CLUSTER_ENDPOINT_HOST_PARAMETER_NAME,
     port: DATABASE_PORT,
     migrateDatabase: true,
@@ -74,7 +73,7 @@ export const eventSourcePatternCache = () => {
   };
 };
 
-export const getEventSourceConstructProps = (stage: StageName): EventSourceProps => {
+export const getIngestRules = (stage: StageName): IngestRules[] => {
   const eventTypes = [
     'Object Created',
     'Object Deleted',
@@ -84,14 +83,10 @@ export const getEventSourceConstructProps = (stage: StageName): EventSourceProps
     'Object Access Tier Changed',
   ];
 
-  const props: EventSourceProps = {
-    queueName: EVENT_SOURCE_QUEUE_NAME,
-    maxReceiveCount: 3,
-    rules: [],
-  };
+  const rules = [];
 
   for (const bucket of FILE_MANAGER_CACHE_BUCKETS[stage]) {
-    props.rules.push({
+    rules.push({
       bucket,
       eventTypes,
       patterns: eventSourcePatternCache(),
@@ -99,14 +94,14 @@ export const getEventSourceConstructProps = (stage: StageName): EventSourceProps
   }
 
   for (const bucket of FILE_MANAGER_BUCKETS[stage]) {
-    props.rules.push({
+    rules.push({
       bucket,
       eventTypes,
       patterns: eventSourcePattern(),
     });
   }
 
-  return props;
+  return rules;
 };
 
 export const getFileManagerStatefulProps = (stage: StageName): FileManagerStatefulConfig => {
@@ -117,6 +112,6 @@ export const getFileManagerStatefulProps = (stage: StageName): FileManagerStatef
       secretName: FILE_MANAGER_PRESIGN_USER_SECRET,
       policies: Function.formatPoliciesForBucket(buckets, [...Function.getObjectActions()]),
     },
-    eventSourceProps: getEventSourceConstructProps(stage),
+    rules: getIngestRules(stage),
   };
 };

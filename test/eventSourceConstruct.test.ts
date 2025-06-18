@@ -5,7 +5,7 @@
 import * as cdk from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { EventBridge } from '@aws-sdk/client-eventbridge';
-import { EventSourceConstruct } from '../infrastructure/components/event-source';
+import { MonitoredQueue } from '../infrastructure/components/monitored-queue';
 import { getFileManagerStatefulProps } from '../infrastructure/stage/config';
 
 let stack: cdk.Stack;
@@ -131,7 +131,7 @@ async function testCacheObjects(event: any, pattern: any) {
 }
 
 test.skip('Test event source event patterns', async () => {
-  new EventSourceConstruct(
+  new MonitoredQueue(
     stack,
     'TestEventSourceConstruct',
     getFileManagerStatefulProps('PROD').eventSourceProps
@@ -152,7 +152,7 @@ test.skip('Test event source event patterns', async () => {
 });
 
 test('Test EventSourceConstruct created props', () => {
-  new EventSourceConstruct(stack, 'TestEventSourceConstruct', {
+  new MonitoredQueue(stack, 'TestEventSourceConstruct', {
     queueName: 'queue',
     maxReceiveCount: 100,
     rules: [
@@ -167,7 +167,7 @@ test('Test EventSourceConstruct created props', () => {
 });
 
 test('Test EventSourceConstruct created props with event types', () => {
-  new EventSourceConstruct(stack, 'TestEventSourceConstruct', {
+  new MonitoredQueue(stack, 'TestEventSourceConstruct', {
     queueName: 'queue',
     maxReceiveCount: 100,
     rules: [
@@ -188,7 +188,7 @@ test('Test EventSourceConstruct created props with event types', () => {
 });
 
 test('Test EventSourceConstruct created props with key rule', () => {
-  new EventSourceConstruct(stack, 'TestEventSourceConstruct', {
+  new MonitoredQueue(stack, 'TestEventSourceConstruct', {
     queueName: 'queue',
     maxReceiveCount: 100,
     rules: [
@@ -220,7 +220,7 @@ test('Test EventSourceConstruct created props with key rule', () => {
 });
 
 test('Test EventSourceConstruct created props with rules matching any bucket', () => {
-  new EventSourceConstruct(stack, 'TestEventSourceConstruct', {
+  new MonitoredQueue(stack, 'TestEventSourceConstruct', {
     queueName: 'queue',
     maxReceiveCount: 100,
     rules: [{}],

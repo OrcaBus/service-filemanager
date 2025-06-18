@@ -13,6 +13,7 @@ export class StatefulStack extends cdk.Stack {
 
     const deployment = new DeploymentStackPipeline(this, 'DeploymentPipeline', {
       githubBranch: 'refactor/move-event-source',
+      enableSlackNotification: false,
       githubRepo: 'service-filemanager',
       stack: FileManagerStatefulStack,
       stackName: 'FileManagerStatefulStack',

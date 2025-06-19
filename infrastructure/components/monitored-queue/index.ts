@@ -13,12 +13,10 @@ export interface MonitoredQueueProps {
    * The props for the main SQS queue.
    */
   queueProps?: QueueProps;
-
   /**
    * The props for the dead-letter SQS queue when a message fails.
    */
   dlqProps?: QueueProps;
-
   /**
    * The maximum number of times a message can be unsuccessfully received before
    * pushing it to the DLQ. Defaults to 3.

@@ -2,6 +2,8 @@ import { Construct } from 'constructs';
 import { Queue } from 'aws-cdk-lib/aws-sqs';
 import { Alarm, ComparisonOperator, MathExpression } from 'aws-cdk-lib/aws-cloudwatch';
 import { Duration, RemovalPolicy } from 'aws-cdk-lib';
+import { Topic } from 'aws-cdk-lib/aws-sns';
+import { SnsAction } from 'aws-cdk-lib/aws-cloudwatch-actions';
 
 /**
  * Properties for the monitored queue.
@@ -22,6 +24,10 @@ export interface MonitoredQueueProps {
    * pushing it to the DLQ. Defaults to 3.
    */
   maxReceiveCount?: number;
+  /**
+   * Send the alarm notification to the SNS topic.
+   */
+  sendToSnsTopic?: string;
 }
 
 /**
@@ -32,12 +38,10 @@ export interface QueueProps {
    * The name of the queue to construct. Defaults to the automatically generated name.
    */
   queueName?: string;
-
   /**
    * How long messages stay in the queue.
    */
   retentionPeriod?: Duration;
-
   /**
    * The removal policy of the queue.
    */
@@ -85,6 +89,11 @@ export class MonitoredQueue extends Construct {
       alarmName: `${this.queue.queueName}-alarm`,
       alarmDescription: 'An event has been received in the dead letter queue.',
     });
+
+    if (props.sendToSnsTopic !== undefined) {
+      const topic = Topic.fromTopicArn(this, 'Topic', props.sendToSnsTopic);
+      this.alarm.addAlarmAction(new SnsAction(topic));
+    }
   }
 
   /**

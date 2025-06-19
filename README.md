@@ -141,7 +141,7 @@ The project is organized into the following directories:
         - **`./infrastructure/stage/functions`**: Contains the filemanager function definitions.
         - **`./infrastructure/stage/config.ts`**: Contains environment-specific configuration files (e.g., `beta`, `gamma`, `prod`).
         - **`./infrastructure/stage/filemanager-stateless-stack.ts`**: The CDK stack entry point for provisioning stateless resources required by the application in `./app`.
-        - **`./infrastructure/stage/filemanager-stateful-stack.ts`**: The CDK stack entry point for provisioning stateful resources required by the application in `./app`.
+        - **`./infrastructure/stage/filemanager-stateful-stack.test.ts`**: The CDK stack entry point for provisioning stateful resources required by the application in `./app`.
 
 - **`.github/workflows/pr-tests.yml`**: Configures GitHub Actions to run tests for `make check-all` (linting and code style), tests defined in `./test`, and `make test` for the `./app` directory.
 

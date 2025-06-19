@@ -28,7 +28,7 @@ export const getFileManagerStatelessProps = (stage: StageName): FileManagerState
   return {
     securityGroupName: SHARED_SECURITY_GROUP_NAME,
     vpcProps: VPC_LOOKUP_PROPS,
-    eventSourceQueueName: FILEMANAGER_INGEST_QUEUE,
+    ingestQueueName: FILEMANAGER_INGEST_QUEUE,
     databaseClusterEndpointHostParameter: DB_CLUSTER_ENDPOINT_HOST_PARAMETER_NAME,
     port: DATABASE_PORT,
     migrateDatabase: true,
@@ -44,7 +44,7 @@ export const getFileManagerStatelessProps = (stage: StageName): FileManagerState
   };
 };
 
-export const eventSourcePattern = () => {
+export const ingestPattern = () => {
   return {
     $or: [
       {
@@ -57,7 +57,7 @@ export const eventSourcePattern = () => {
   };
 };
 
-export const eventSourcePatternCache = () => {
+export const ingestCachePattern = () => {
   // NOT KEY in cache AND (SIZE > 0 OR NOT KEY ends with "/") expands to
   // (NOT KEY in cache and SIZE > 0) OR (NOT KEY in cache and NOT KEY ends with "/")\
   return {
@@ -89,7 +89,7 @@ export const getIngestRules = (stage: StageName): IngestRules[] => {
     rules.push({
       bucket,
       eventTypes,
-      patterns: eventSourcePatternCache(),
+      patterns: ingestCachePattern(),
     });
   }
 
@@ -97,7 +97,7 @@ export const getIngestRules = (stage: StageName): IngestRules[] => {
     rules.push({
       bucket,
       eventTypes,
-      patterns: eventSourcePattern(),
+      patterns: ingestPattern(),
     });
   }
 

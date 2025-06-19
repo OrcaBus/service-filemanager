@@ -28,7 +28,7 @@ import { NamedLambdaRole } from '@orcabus/platform-cdk-constructs/named-lambda-r
  * Stateful config for filemanager.
  */
 export type FileManagerStatelessConfig = Omit<DatabaseProps, 'host' | 'securityGroup'> & {
-  eventSourceQueueName: string;
+  ingestQueueName: string;
   eventSourceBuckets: string[];
   inventorySourceBuckets: string[];
   databaseClusterEndpointHostParameter: string;
@@ -96,7 +96,7 @@ export class FileManagerStack extends Stack {
       'FilemanagerQueue',
       Arn.format(
         {
-          resource: props.eventSourceQueueName,
+          resource: props.ingestQueueName,
           service: 'sqs',
         },
         this
@@ -136,7 +136,7 @@ export class FileManagerStack extends Stack {
       vpc: this.vpc,
       host: this.host,
       securityGroup: this.securityGroup,
-      eventSources: [this.queue],
+      ingestQueues: [this.queue],
       buckets: props.eventSourceBuckets,
       role: this.ingestRole,
       ...props,

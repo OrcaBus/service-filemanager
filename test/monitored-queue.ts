@@ -1,6 +1,6 @@
 import * as cdk from 'aws-cdk-lib';
-import { Template } from 'aws-cdk-lib/assertions';
-import { EventDLQConstruct } from '../infrastructure/components/event-dlq';
+import { Match, Template } from 'aws-cdk-lib/assertions';
+import { MonitoredQueue } from '../infrastructure/components/monitored-queue';
 
 let stack: cdk.Stack;
 
@@ -9,6 +9,13 @@ function assert_common(template: Template) {
 
   template.hasResourceProperties('AWS::SQS::Queue', {
     QueueName: 'queue',
+    RedrivePolicy: {
+      deadLetterTargetArn: Match.anyValue(),
+      maxReceiveCount: 100,
+    },
+  });
+  template.hasResourceProperties('AWS::SQS::Queue', {
+    QueueName: 'queue-dlq',
   });
 
   template.hasResourceProperties('AWS::CloudWatch::Alarm', {
@@ -23,9 +30,13 @@ beforeEach(() => {
 });
 
 test('Test EventSourceConstruct created props', () => {
-  new EventDLQConstruct(stack, 'TestEventDLQConstruct', 'TestEventDLQAlarm', {
-    queueName: 'queue',
-    alarmName: 'alarm',
+  new MonitoredQueue(stack, 'MonitoredQueue', {
+    queueProps: {
+      queueName: 'queue',
+    },
+    dlqProps: {
+      queueName: 'queue-dlq',
+    },
   });
   const template = Template.fromStack(stack);
 

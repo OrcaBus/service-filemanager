@@ -1,6 +1,6 @@
 import { Construct } from 'constructs';
 import { Queue } from 'aws-cdk-lib/aws-sqs';
-import { Alarm, ComparisonOperator, MathExpression } from 'aws-cdk-lib/aws-cloudwatch';
+import { Alarm, ComparisonOperator, TreatMissingData } from 'aws-cdk-lib/aws-cloudwatch';
 import { Duration, RemovalPolicy } from 'aws-cdk-lib';
 import { Topic } from 'aws-cdk-lib/aws-sns';
 import { SnsAction } from 'aws-cdk-lib/aws-cloudwatch-actions';
@@ -47,8 +47,8 @@ export interface QueueProps {
 }
 
 /**
- * A construct that defines an SQS S3 event source, along with a DLQ and CloudWatch alarms that notify
- * slack.
+ * A construct that defines an SQS queue, along with a DLQ and CloudWatch alarms that can notify an
+ * SNS topic.
  */
 export class MonitoredQueue extends Construct {
   readonly queue: Queue;
@@ -72,15 +72,9 @@ export class MonitoredQueue extends Construct {
       ...props.queueProps,
     });
 
-    const rateOfMessages = new MathExpression({
-      expression: 'RATE(visible + notVisible)',
-      usingMetrics: {
-        visible: this.deadLetterQueue.metricApproximateNumberOfMessagesVisible(),
-        notVisible: this.deadLetterQueue.metricApproximateNumberOfMessagesVisible(),
-      },
-    });
     this.alarm = new Alarm(scope, 'Alarm', {
-      metric: rateOfMessages,
+      metric: this.deadLetterQueue.metricApproximateNumberOfMessagesVisible(),
+      treatMissingData: TreatMissingData.BREACHING,
       comparisonOperator: ComparisonOperator.GREATER_THAN_THRESHOLD,
       threshold: 0,
       evaluationPeriods: 1,

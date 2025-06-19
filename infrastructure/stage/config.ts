@@ -33,8 +33,8 @@ export const getFileManagerStatelessProps = (stage: StageName): FileManagerState
     port: DATABASE_PORT,
     migrateDatabase: true,
     accessKeySecretArn: FILE_MANAGER_ACCESS_KEY_ARNS[stage],
-    inventorySourceBuckets: buckets,
-    eventSourceBuckets: buckets,
+    inventoryBuckets: buckets,
+    ingestBuckets: buckets,
     fileManagerRoleName: FILE_MANAGER_INGEST_ROLE,
     apiGatewayCognitoProps: {
       ...getDefaultApiGatewayConfiguration(stage),

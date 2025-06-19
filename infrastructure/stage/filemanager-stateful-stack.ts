@@ -60,7 +60,7 @@ export class FileManagerStatefulStack extends Stack {
 
     this.accessKeySecret = new AccessKeySecret(this, 'AccessKey', props.accessKeyProps);
 
-    this.monitoredQueue = new MonitoredQueue(this, 'EventSourceConstruct', {
+    this.monitoredQueue = new MonitoredQueue(this, 'MonitoredQueue', {
       queueProps: {
         queueName: FILEMANAGER_INGEST_QUEUE,
       },

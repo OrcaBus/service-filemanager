@@ -1,11 +1,12 @@
 import { Construct } from 'constructs';
-import { Arn, Duration, RemovalPolicy, Stack, StackProps } from 'aws-cdk-lib';
+import { Duration, RemovalPolicy, Stack, StackProps } from 'aws-cdk-lib';
 import { AccessKeySecret, AccessKeySecretProps } from '../components/access-key-secret';
-import { MonitoredQueue } from '../components/monitored-queue';
 import { Rule } from 'aws-cdk-lib/aws-events';
 import { ServicePrincipal } from 'aws-cdk-lib/aws-iam';
 import { SqsQueue } from 'aws-cdk-lib/aws-events-targets';
-import { ALERTS_SNS_TOPIC, FILEMANAGER_INGEST_QUEUE } from './constants';
+import { FILEMANAGER_INGEST_QUEUE } from './constants';
+import { MonitoredQueue } from '@orcabus/platform-cdk-constructs/monitored-queue';
+import { SlackAlerts } from '@orcabus/platform-cdk-constructs/shared-config/slack';
 
 /**
  * Stateful config for filemanager.
@@ -70,13 +71,7 @@ export class FileManagerStatefulStack extends Stack {
         removalPolicy: RemovalPolicy.RETAIN,
         retentionPeriod: Duration.days(14),
       },
-      sendToSnsTopic: Arn.format(
-        {
-          service: 'sns',
-          resource: ALERTS_SNS_TOPIC,
-        },
-        this
-      ),
+      snsTopicArn: SlackAlerts.formatArn(this),
     });
     this.createIngestRules(props.rules);
     this.monitoredQueue.queue.grantSendMessages(new ServicePrincipal('events.amazonaws.com'));

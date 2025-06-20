@@ -18,17 +18,17 @@ export interface BucketProps {
 /**
  * Props related to the filemanager event source.
  */
-export type EventSourceProps = {
+export type IngestQueueProps = {
   /**
    * The SQS queue URL to receive events from.
    */
-  readonly eventSources: IQueue[];
+  readonly ingestQueues: IQueue[];
 } & BucketProps;
 
 /**
  * Props for the ingest function.
  */
-export type IngestFunctionProps = FunctionPropsConfigurable & DatabaseProps & EventSourceProps;
+export type IngestFunctionProps = FunctionPropsConfigurable & DatabaseProps & IngestQueueProps;
 
 /**
  * A construct for the Lambda ingest function.
@@ -46,7 +46,7 @@ export class IngestFunction extends Function {
 
     this.addAwsManagedPolicy('service-role/AWSLambdaSQSQueueExecutionRole');
 
-    props.eventSources.forEach((source) => {
+    props.ingestQueues.forEach((source) => {
       const eventSource = new SqsEventSource(source);
       this.function.addEventSource(eventSource);
     });

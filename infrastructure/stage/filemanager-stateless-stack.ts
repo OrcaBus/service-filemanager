@@ -28,9 +28,9 @@ import { NamedLambdaRole } from '@orcabus/platform-cdk-constructs/named-lambda-r
  * Stateful config for filemanager.
  */
 export type FileManagerStatelessConfig = Omit<DatabaseProps, 'host' | 'securityGroup'> & {
-  eventSourceQueueName: string;
-  eventSourceBuckets: string[];
-  inventorySourceBuckets: string[];
+  ingestQueueName: string;
+  ingestBuckets: string[];
+  inventoryBuckets: string[];
   databaseClusterEndpointHostParameter: string;
   vpcProps: VpcLookupOptions;
   migrateDatabase?: boolean;
@@ -96,7 +96,7 @@ export class FileManagerStack extends Stack {
       'FilemanagerQueue',
       Arn.format(
         {
-          resource: props.eventSourceQueueName,
+          resource: props.ingestQueueName,
           service: 'sqs',
         },
         this
@@ -136,8 +136,8 @@ export class FileManagerStack extends Stack {
       vpc: this.vpc,
       host: this.host,
       securityGroup: this.securityGroup,
-      eventSources: [this.queue],
-      buckets: props.eventSourceBuckets,
+      ingestQueues: [this.queue],
+      buckets: props.ingestBuckets,
       role: this.ingestRole,
       ...props,
     });
@@ -152,7 +152,7 @@ export class FileManagerStack extends Stack {
       host: this.host,
       securityGroup: this.securityGroup,
       port: props.port,
-      buckets: props.inventorySourceBuckets,
+      buckets: props.inventoryBuckets,
       role: this.ingestRole,
       buildEnvironment: props.buildEnvironment,
     });
@@ -166,7 +166,7 @@ export class FileManagerStack extends Stack {
       vpc: this.vpc,
       host: this.host,
       securityGroup: this.securityGroup,
-      buckets: [...props.eventSourceBuckets, ...props.inventorySourceBuckets],
+      buckets: [...props.ingestBuckets, ...props.inventoryBuckets],
       role: this.ingestRole,
       ...props,
     });

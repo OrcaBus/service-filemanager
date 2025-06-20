@@ -2,23 +2,22 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/dot-notation */
 
-import * as cdk from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { EventBridge } from '@aws-sdk/client-eventbridge';
-import { EventSourceConstruct } from '../infrastructure/components/event-source';
 import { getFileManagerStatefulProps } from '../infrastructure/stage/config';
+import { FileManagerStatefulStack } from '../infrastructure/stage/filemanager-stateful-stack';
+import { App } from 'aws-cdk-lib';
+import { FILEMANAGER_INGEST_QUEUE } from '../infrastructure/stage/constants';
 
-let stack: cdk.Stack;
 let eventbridge: EventBridge;
 
 function assertCommon(template: Template) {
   template.resourceCountIs('AWS::SQS::Queue', 2);
 
   template.hasResourceProperties('AWS::SQS::Queue', {
-    QueueName: 'queue',
+    QueueName: FILEMANAGER_INGEST_QUEUE,
     RedrivePolicy: {
       deadLetterTargetArn: Match.anyValue(),
-      maxReceiveCount: 100,
     },
   });
 
@@ -82,7 +81,6 @@ function testS3Event(bucket: string, key: string, size: number): any {
 }
 
 beforeEach(() => {
-  stack = new cdk.Stack();
   eventbridge = new EventBridge();
 });
 
@@ -131,10 +129,11 @@ async function testCacheObjects(event: any, pattern: any) {
 }
 
 test.skip('Test event source event patterns', async () => {
-  new EventSourceConstruct(
-    stack,
+  const app = new App({});
+  const stack = new FileManagerStatefulStack(
+    app,
     'TestEventSourceConstruct',
-    getFileManagerStatefulProps('PROD').eventSourceProps
+    getFileManagerStatefulProps('PROD')
   );
 
   const template = Template.fromStack(stack);
@@ -151,10 +150,18 @@ test.skip('Test event source event patterns', async () => {
   }
 });
 
-test('Test EventSourceConstruct created props', () => {
-  new EventSourceConstruct(stack, 'TestEventSourceConstruct', {
-    queueName: 'queue',
-    maxReceiveCount: 100,
+test('Test stateful created props', () => {
+  const app = new App({});
+  const stack = new FileManagerStatefulStack(app, 'TestFilemanagerStatefulStack', {
+    env: {
+      account: '123456789',
+      region: 'ap-southeast-2',
+    },
+    accessKeyProps: {
+      secretName: 'secret', // pragma: allowlist secret
+      userName: 'username',
+      policies: [],
+    },
     rules: [
       {
         bucket: 'bucket',
@@ -166,10 +173,14 @@ test('Test EventSourceConstruct created props', () => {
   assertCommon(template);
 });
 
-test('Test EventSourceConstruct created props with event types', () => {
-  new EventSourceConstruct(stack, 'TestEventSourceConstruct', {
-    queueName: 'queue',
-    maxReceiveCount: 100,
+test('Test stateful created props with event types', () => {
+  const app = new App({});
+  const stack = new FileManagerStatefulStack(app, 'TestFilemanagerStatefulStack', {
+    accessKeyProps: {
+      secretName: 'secret', // pragma: allowlist secret
+      userName: 'username',
+      policies: [],
+    },
     rules: [
       {
         bucket: 'bucket',
@@ -187,10 +198,14 @@ test('Test EventSourceConstruct created props with event types', () => {
   });
 });
 
-test('Test EventSourceConstruct created props with key rule', () => {
-  new EventSourceConstruct(stack, 'TestEventSourceConstruct', {
-    queueName: 'queue',
-    maxReceiveCount: 100,
+test('Test stateful created props with key rule', () => {
+  const app = new App({});
+  const stack = new FileManagerStatefulStack(app, 'TestFilemanagerStatefulStack', {
+    accessKeyProps: {
+      secretName: 'secret', // pragma: allowlist secret
+      userName: 'username',
+      policies: [],
+    },
     rules: [
       {
         bucket: 'bucket',
@@ -219,10 +234,14 @@ test('Test EventSourceConstruct created props with key rule', () => {
   });
 });
 
-test('Test EventSourceConstruct created props with rules matching any bucket', () => {
-  new EventSourceConstruct(stack, 'TestEventSourceConstruct', {
-    queueName: 'queue',
-    maxReceiveCount: 100,
+test('Test stateful created props with rules matching any bucket', () => {
+  const app = new App({});
+  const stack = new FileManagerStatefulStack(app, 'TestFilemanagerStatefulStack', {
+    accessKeyProps: {
+      secretName: 'secret', // pragma: allowlist secret
+      userName: 'username',
+      policies: [],
+    },
     rules: [{}],
   });
   const template = Template.fromStack(stack);

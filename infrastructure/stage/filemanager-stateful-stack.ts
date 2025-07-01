@@ -61,15 +61,18 @@ export class FileManagerStatefulStack extends Stack {
 
     this.accessKeySecret = new AccessKeySecret(this, 'AccessKey', props.accessKeyProps);
 
+    const alarmOldestMessage = Duration.days(2).toSeconds();
     this.monitoredQueue = new MonitoredQueue(this, 'MonitoredQueue', {
       queueProps: {
         queueName: FILEMANAGER_INGEST_QUEUE,
         removalPolicy: RemovalPolicy.RETAIN,
+        alarmOldestMessageSeconds: alarmOldestMessage,
       },
       dlqProps: {
         queueName: `${FILEMANAGER_INGEST_QUEUE}-dlq`,
         removalPolicy: RemovalPolicy.RETAIN,
         retentionPeriod: Duration.days(14),
+        alarmOldestMessageSeconds: alarmOldestMessage,
       },
       snsTopicArn: SlackAlerts.formatArn(this),
     });

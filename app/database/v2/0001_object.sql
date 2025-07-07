@@ -9,6 +9,8 @@ create table object (
     key text not null,
     -- The version id of the object. It is allowed to be null for non-versioned objects.
     version_id text default null,
+    -- The size of the object.
+    size bigint default null,
     -- When this object was created. This column should not be relied upon for ordering.
     created timestamptz not null default now(),
     -- The ordering string determines the order in which `object`s and `historical_object`s are created when compared

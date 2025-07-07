@@ -10,6 +10,8 @@ create table historical_object (
     key text not null,
     -- The version id of the object. It is allowed to be null for non-versioned objects.
     version_id text default null,
+    -- The size of the object.
+    size bigint default null,
     -- When this object was created. This column should not be relied upon for ordering.
     created timestamptz not null,
     -- When this object was deleted. This column should not be relied upon for ordering.

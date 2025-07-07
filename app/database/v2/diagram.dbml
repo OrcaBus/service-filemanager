@@ -1,0 +1,22 @@
+Table object {
+    object_id uuid [not null, primary key]
+    bucket text [not null]
+    key text [not null]
+    version_id text
+    size bigint
+    created timestamptz [not null]
+    ordering text [not null]
+    filemanager_id uuid [not null]
+}
+
+Table historical_object {
+    historical_object_id uuid [not null, primary key]
+    bucket text [not null]
+    key text [not null]
+    version_id text
+    size bigint
+    created timestamptz [not null]
+    deleted timestamptz [not null]
+    ordering text [not null]
+    filemanager_id uuid [not null]
+}

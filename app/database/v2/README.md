@@ -39,11 +39,11 @@ because the `object` table will only contain current records, which will be a sm
 The above 3 tables are all linked together with a `filemanager_id` which addresses requirement 3, along-side object tagging.
 This will be similar in functionality to the existing `ingest_id`, and allows move tracking.
 
-There is a further `group` table, which allows arbitrary `attributes` to tag specific groups of objects, and a `checksums`
-table which tracks any checksum. This addresses requirements 4-5. The `group` table has one primary `key`, which will allow
-and arbitrary `attribute` values, which will allow fast queries on the key. E.g. for `portal_run_id`, the key would represent
-the existing `portalRunId`. The `checksums` table can be considered a specialization of the `group` table for checksum
-specific logic. It also uses a `jsonb` column to support arbitrary amounts of checksums.
+There is a further `attributes` table, which allows arbitrary `attributes` to tag specific groups of objects, and a `checksum`
+table which tracks any checksum. This addresses requirements 4-5. The `attributes` table functions similarly to the `attributes`
+column in the current design. E.g. for `portal_run_id`, the JSON key would represent the existing `portalRunId`.
+The `checksum` table can be considered a specialization of the `attributes` table for checksum specific logic as it stores
+a single key and value.
 
 Each object is also attached to an `s3_metadata` table which contains S3-specific fields, and has the possibility to be
 extended to support other cloud storage providers. This, alongside the separate `s3_event` table, addresses requirement 6.

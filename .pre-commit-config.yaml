@@ -4,6 +4,7 @@ repos:
     rev: v5.0.0
     hooks:
       - id: check-added-large-files
+        args: ['--maxkb=2048']
         exclude: ^(pnpm-lock.yaml)
       - id: check-yaml
       - id: detect-aws-credentials

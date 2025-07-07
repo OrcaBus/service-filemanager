@@ -29,6 +29,8 @@ multiple kinds of cloud storage, i.e. not just S3.
 
 ### Proposed design
 
+[<img src="./diagram.svg">](https://dbdiagram.io/d/686c5f0cf413ba3508b8639b)
+
 The design splits the existing `s3_object` table into two primary tables, `object` and `historical_object`. The `object`
 table represents the `current_state` of data, and `historical_object` contains all previous records for the `bucket`, `key`
 and `version_id`. There is a concurrently running `s3_event` table which determines records for `object` and `historical_object`

@@ -141,9 +141,7 @@ impl PatchBody {
                 QueryError("expected string value for `ingestId` update".to_string())
             })?)
             .map_err(|err| {
-                QueryError(format!(
-                    "failed to parse UUID for `ingestId` update: {err}"
-                ))
+                QueryError(format!("failed to parse UUID for `ingestId` update: {err}"))
             })?;
 
             Ok::<_, Error>(uuid)

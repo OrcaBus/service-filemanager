@@ -64,9 +64,7 @@ impl Ingester {
             })?;
 
             let mut number = u64::from_le_bytes(decoded.try_into().map_err(|err| {
-                ParseError(format!(
-                    "failed to convert sequencer to integer: {err:x?}"
-                ))
+                ParseError(format!("failed to convert sequencer to integer: {err:x?}"))
             })?);
             number += 1;
 
@@ -78,9 +76,7 @@ impl Ingester {
             // Padding does not exist, start padding with the first value.
             let first = hex::encode(1_u64.to_le_bytes());
 
-            Ok(format!(
-                "{sequencer:0<SEQUENCER_PADDING_AMOUNT$}-{first}"
-            ))
+            Ok(format!("{sequencer:0<SEQUENCER_PADDING_AMOUNT$}-{first}"))
         }
     }
 

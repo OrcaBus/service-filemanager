@@ -1,4 +1,4 @@
-use sqlx::{query, query_as, Acquire, PgConnection, Postgres, Transaction};
+use sqlx::{Acquire, PgConnection, Postgres, Transaction, query, query_as};
 
 use crate::database::Client;
 use crate::error::Result;
@@ -70,8 +70,8 @@ impl Query {
 mod tests {
     use std::ops::Add;
 
-    use crate::database::aws::ingester::tests::test_events;
     use crate::database::aws::ingester::Ingester;
+    use crate::database::aws::ingester::tests::test_events;
     use crate::database::aws::migration::tests::MIGRATOR;
     use crate::events::aws::message::EventType::Created;
     use crate::events::aws::tests::{
@@ -171,12 +171,14 @@ mod tests {
         tx.commit().await.unwrap();
 
         assert_eq!(results.len(), 2);
-        assert!(results
-            .first()
-            .iter()
-            .all(|result| result.bucket == "bucket"
-                && result.key == "key"
-                && result.event_time == new_date));
+        assert!(
+            results
+                .first()
+                .iter()
+                .all(|result| result.bucket == "bucket"
+                    && result.key == "key"
+                    && result.event_time == new_date)
+        );
         assert!(results.get(1).iter().all(|result| result.bucket == "bucket"
             && result.key == new_key
             && result.event_time == new_date));

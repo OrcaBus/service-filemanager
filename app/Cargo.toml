@@ -1,5 +1,5 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 
 members = [
     "filemanager",
@@ -13,6 +13,6 @@ members = [
 
 [workspace.package]
 license = "MIT"
-edition = "2021"
+edition = "2024"
 authors = ["Marko Malenic <mmalenic1@gmail.com>", "Roman Valls Guimera <brainstorm@nopcode.org>"]
 rust-version = "1.85"

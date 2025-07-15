@@ -1,4 +1,4 @@
-use lambda_runtime::{run, service_fn, Error, LambdaEvent};
+use lambda_runtime::{Error, LambdaEvent, run, service_fn};
 use serde::Deserialize;
 
 use filemanager::clients::aws::s3::Client;

@@ -1,7 +1,7 @@
 //! This module handles logic associated with event ingestion.
 //!
 
-use sqlx::{query, PgConnection};
+use sqlx::{PgConnection, query};
 use tracing::debug;
 
 use crate::database::aws::query::Query;
@@ -56,34 +56,27 @@ impl Ingester {
             // Padding exists, increment the right side of the sequencer.
             let (left, right) = sequencer.rsplit_once("-").ok_or_else(|| {
                 ParseError(format!(
-                    "failed to parse sequencer for padding: {}",
-                    sequencer
+                    "failed to parse sequencer for padding: {sequencer}"
                 ))
             })?;
             let decoded = hex::decode(right).map_err(|err| {
-                ParseError(format!("failed to decode right padded sequencer: {}", err))
+                ParseError(format!("failed to decode right padded sequencer: {err}"))
             })?;
 
             let mut number = u64::from_le_bytes(decoded.try_into().map_err(|err| {
-                ParseError(format!(
-                    "failed to convert sequencer to integer: {:x?}",
-                    err
-                ))
+                ParseError(format!("failed to convert sequencer to integer: {err:x?}"))
             })?);
             number += 1;
 
             let bytes = number.to_le_bytes();
             let encoded = hex::encode(bytes);
 
-            Ok::<_, Error>(format!("{}-{}", left, encoded))
+            Ok::<_, Error>(format!("{left}-{encoded}"))
         } else {
             // Padding does not exist, start padding with the first value.
             let first = hex::encode(1_u64.to_le_bytes());
 
-            Ok(format!(
-                "{:0<SEQUENCER_PADDING_AMOUNT$}-{}",
-                sequencer, first
-            ))
+            Ok(format!("{sequencer:0<SEQUENCER_PADDING_AMOUNT$}-{first}"))
         }
     }
 
@@ -227,19 +220,19 @@ pub(crate) mod tests {
     use crate::database::aws::migration::tests::MIGRATOR;
     use crate::database::entities::sea_orm_active_enums::{ArchiveStatus, Reason};
     use crate::database::{Client, Ingest};
+    use crate::events::EventSourceType;
+    use crate::events::EventSourceType::S3;
     use crate::events::aws::message::EventType::{Created, Deleted};
-    use crate::events::aws::message::{default_version_id, EventType};
+    use crate::events::aws::message::{EventType, default_version_id};
     use crate::events::aws::tests::{
-        expected_events_simple, expected_events_simple_delete_marker, expected_flat_events_simple,
         EXPECTED_QUOTED_E_TAG, EXPECTED_SEQUENCER_CREATED_ONE, EXPECTED_SEQUENCER_CREATED_TWO,
         EXPECTED_SEQUENCER_CREATED_ZERO, EXPECTED_SEQUENCER_DELETED_ONE,
         EXPECTED_SEQUENCER_DELETED_TWO, EXPECTED_SHA256, EXPECTED_VERSION_ID,
+        expected_events_simple, expected_events_simple_delete_marker, expected_flat_events_simple,
     };
     use crate::events::aws::{
         FlatS3EventMessage, FlatS3EventMessages, StorageClass, TransposedS3EventMessages,
     };
-    use crate::events::EventSourceType;
-    use crate::events::EventSourceType::S3;
     use crate::uuid::UuidGenerator;
 
     #[test]
@@ -327,8 +320,7 @@ pub(crate) mod tests {
             &s3_object_results[1],
             Some(0),
             Some(format!(
-                "{}000000000000-0100000000000000",
-                EXPECTED_SEQUENCER_CREATED_ONE
+                "{EXPECTED_SEQUENCER_CREATED_ONE}000000000000-0100000000000000"
             )),
             EXPECTED_VERSION_ID.to_string(),
             Some(Default::default()),
@@ -339,8 +331,7 @@ pub(crate) mod tests {
             &s3_object_results[2],
             None,
             Some(format!(
-                "{}000000000000-0200000000000000",
-                EXPECTED_SEQUENCER_CREATED_ONE
+                "{EXPECTED_SEQUENCER_CREATED_ONE}000000000000-0200000000000000"
             )),
             EXPECTED_VERSION_ID.to_string(),
             Some(Default::default()),
@@ -377,8 +368,7 @@ pub(crate) mod tests {
             &s3_object_results[1],
             Some(0),
             Some(format!(
-                "{}000000000000-0100000000000000",
-                EXPECTED_SEQUENCER_CREATED_ONE
+                "{EXPECTED_SEQUENCER_CREATED_ONE}000000000000-0100000000000000"
             )),
             EXPECTED_VERSION_ID.to_string(),
             Some(Default::default()),
@@ -389,8 +379,7 @@ pub(crate) mod tests {
             &s3_object_results[2],
             None,
             Some(format!(
-                "{}000000000000-0200000000000000",
-                EXPECTED_SEQUENCER_CREATED_ONE
+                "{EXPECTED_SEQUENCER_CREATED_ONE}000000000000-0200000000000000"
             )),
             EXPECTED_VERSION_ID.to_string(),
             Some(Default::default()),
@@ -427,8 +416,7 @@ pub(crate) mod tests {
             &s3_object_results[1],
             Some(0),
             Some(format!(
-                "{}000000000000-0100000000000000",
-                EXPECTED_SEQUENCER_CREATED_ONE
+                "{EXPECTED_SEQUENCER_CREATED_ONE}000000000000-0100000000000000"
             )),
             EXPECTED_VERSION_ID.to_string(),
             Some(Default::default()),
@@ -473,8 +461,7 @@ pub(crate) mod tests {
             &s3_object_results[1],
             Some(0),
             Some(format!(
-                "{}000000000000-0100000000000000",
-                EXPECTED_SEQUENCER_CREATED_ONE
+                "{EXPECTED_SEQUENCER_CREATED_ONE}000000000000-0100000000000000"
             )),
             EXPECTED_VERSION_ID.to_string(),
             Some(Default::default()),
@@ -578,9 +565,11 @@ pub(crate) mod tests {
         let s3_object_results = fetch_results(&ingester).await;
 
         assert_eq!(s3_object_results.len(), 1);
-        assert!(s3_object_results[0]
-            .get::<Option<Uuid>, _>("ingest_id")
-            .is_some());
+        assert!(
+            s3_object_results[0]
+                .get::<Option<Uuid>, _>("ingest_id")
+                .is_some()
+        );
         assert_created(&s3_object_results[0]);
     }
 
@@ -629,9 +618,11 @@ pub(crate) mod tests {
         let s3_object_results = fetch_results(&ingester).await;
 
         assert_eq!(s3_object_results.len(), 1);
-        assert!(s3_object_results[0]
-            .get::<Option<Uuid>, _>("ingest_id")
-            .is_some());
+        assert!(
+            s3_object_results[0]
+                .get::<Option<Uuid>, _>("ingest_id")
+                .is_some()
+        );
         assert_with(
             &s3_object_results[0],
             Some(i64::MAX),
@@ -652,7 +643,7 @@ pub(crate) mod tests {
 
         let s3_object_results = fetch_results(&ingester).await;
 
-        println!("{:#?}", s3_object_results);
+        println!("{s3_object_results:#?}");
         assert_eq!(s3_object_results.len(), 2);
         assert_ingest_events(
             &s3_object_results[1],
@@ -672,9 +663,11 @@ pub(crate) mod tests {
         let s3_object_results = fetch_results(&ingester).await;
 
         assert_eq!(s3_object_results.len(), 2);
-        assert!(s3_object_results[0]
-            .get::<Option<Uuid>, _>("ingest_id")
-            .is_some());
+        assert!(
+            s3_object_results[0]
+                .get::<Option<Uuid>, _>("ingest_id")
+                .is_some()
+        );
         assert_eq!(
             1,
             s3_object_results[0].get::<i64, _>("number_duplicate_events")
@@ -798,9 +791,11 @@ pub(crate) mod tests {
         let s3_object_results = fetch_results(&ingester).await;
 
         assert_eq!(s3_object_results.len(), 2);
-        assert!(s3_object_results[0]
-            .get::<Option<Uuid>, _>("ingest_id")
-            .is_some());
+        assert!(
+            s3_object_results[0]
+                .get::<Option<Uuid>, _>("ingest_id")
+                .is_some()
+        );
         // Order should be different here.
         assert_ingest_events(
             &s3_object_results[1],
@@ -892,7 +887,7 @@ pub(crate) mod tests {
 
         let s3_object_results = fetch_results(&ingester).await;
 
-        println!("{:#?}", s3_object_results);
+        println!("{s3_object_results:#?}");
         assert_eq!(s3_object_results.len(), 3);
         assert_eq!(
             0,

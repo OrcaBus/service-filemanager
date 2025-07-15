@@ -5,15 +5,15 @@ use crate::clients::aws::config::Config;
 use crate::error::Error::{ParseError, SecretsManagerError};
 use crate::error::Result;
 use aws_credential_types::provider::ProvideCredentials;
-use aws_credential_types::{provider, Credentials};
+use aws_credential_types::{Credentials, provider};
 use aws_sdk_s3::error::SdkError;
 use aws_sdk_secretsmanager as secretsmanager;
 use aws_sdk_secretsmanager::error::DisplayErrorContext;
 use aws_sdk_secretsmanager::operation::get_secret_value::GetSecretValueError;
-use aws_secretsmanager_caching::output::GetSecretValueOutputDef;
 use aws_secretsmanager_caching::SecretsManagerCachingClient;
-use base64::prelude::Engine;
+use aws_secretsmanager_caching::output::GetSecretValueOutputDef;
 use base64::prelude::BASE64_STANDARD;
+use base64::prelude::Engine;
 use serde::Deserialize;
 use serde_json::{from_slice, from_str};
 use std::error::Error;
@@ -100,7 +100,7 @@ impl SecretsManagerCredentials {
                 err.to_string()
             };
 
-            SecretsManagerError(format!("no valid secret {}: {}", id, display_err))
+            SecretsManagerError(format!("no valid secret {id}: {display_err}"))
         })?;
 
         let secret = if let Some(string) = secret.secret_string {

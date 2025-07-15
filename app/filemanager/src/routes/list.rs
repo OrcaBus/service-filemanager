@@ -4,7 +4,7 @@
 use axum::extract::{Request, State};
 use axum::http::header::{CONTENT_ENCODING, CONTENT_TYPE};
 use axum::routing::get;
-use axum::{extract, Json, Router};
+use axum::{Json, Router, extract};
 use axum_extra::extract::WithRejection;
 use itertools::Itertools;
 use sea_orm::{ConnectionTrait, TransactionTrait};
@@ -19,12 +19,12 @@ use crate::database::entities::s3_object;
 use crate::database::entities::s3_object::Model as S3;
 use crate::error::Result;
 use crate::queries::list::ListQueryBuilder;
+use crate::routes::AppState;
 use crate::routes::error::{ErrorStatusCode, QsQuery, Query};
 use crate::routes::filter::{AttributesOnlyFilter, S3ObjectsFilter};
 use crate::routes::header::HeaderParser;
 use crate::routes::pagination::{ListResponse, Pagination};
 use crate::routes::presign::{PresignedParams, PresignedUrlBuilder};
-use crate::routes::AppState;
 
 /// The return value for count operations showing the number of records in the database.
 #[derive(Debug, Deserialize, Serialize, ToSchema, Eq, PartialEq)]
@@ -376,12 +376,12 @@ pub fn list_router() -> Router<AppState> {
 pub(crate) mod tests {
     use aws_sdk_s3::operation::get_object::GetObjectOutput;
     use aws_sdk_s3::primitives::ByteStream;
-    use aws_smithy_mocks::{mock, mock_client, Rule, RuleMode};
-    use axum::body::to_bytes;
+    use aws_smithy_mocks::{Rule, RuleMode, mock, mock_client};
     use axum::body::Body;
+    use axum::body::to_bytes;
     use axum::http::header::{CONTENT_TYPE, HOST};
     use axum::http::{Method, Request, StatusCode};
-    use percent_encoding::{percent_encode, NON_ALPHANUMERIC};
+    use percent_encoding::{NON_ALPHANUMERIC, percent_encode};
     use serde::de::DeserializeOwned;
     use serde_json::{from_slice, json};
     use sqlx::PgPool;
@@ -393,10 +393,10 @@ pub(crate) mod tests {
     use crate::database::aws::migration::tests::MIGRATOR;
     use crate::database::entities::sea_orm_active_enums::EventType;
     use crate::env::Config;
+    use crate::queries::EntriesBuilder;
     use crate::queries::list::tests::filter_event_type;
     use crate::queries::update::tests::{assert_contains, entries_many};
     use crate::queries::update::tests::{change_key, change_many};
-    use crate::queries::EntriesBuilder;
     use crate::routes::api_router;
     use crate::routes::pagination::Links;
     use crate::routes::presign::tests::assert_presigned_params;
@@ -564,7 +564,7 @@ pub(crate) mod tests {
             .build(state.database_client())
             .await
             .unwrap();
-        println!("{:#?}", entries);
+        println!("{entries:#?}");
 
         let result: ListResponse<Url> =
             response_from_get(state, "/s3/presign?key=0&bucket=0").await;
@@ -738,7 +738,7 @@ pub(crate) mod tests {
         let brackets = percent_encode("[]".as_ref(), NON_ALPHANUMERIC).to_string();
         let result: ListResponse<S3> = response_from_get(
             state,
-            &format!("/s3?currentState=false&key{}=3&key{}=4", brackets, brackets),
+            &format!("/s3?currentState=false&key{brackets}=3&key{brackets}=4"),
         )
         .await;
         assert_eq!(

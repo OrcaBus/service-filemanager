@@ -17,11 +17,11 @@ use filemanager::database::{Client, Migrate};
 use filemanager::env::Config;
 use filemanager::error::Error::IoError;
 use filemanager::error::Result;
-use filemanager::handlers::init_tracing_with_format;
 use filemanager::handlers::Format::Pretty;
+use filemanager::handlers::init_tracing_with_format;
 use filemanager::queries::EntriesBuilder;
 use filemanager::routes::openapi::SWAGGER_UI_PATH;
-use filemanager::routes::{router, AppState};
+use filemanager::routes::{AppState, router};
 
 /// Run the filemanager API server locally to explore the API.
 #[derive(Parser, Debug)]

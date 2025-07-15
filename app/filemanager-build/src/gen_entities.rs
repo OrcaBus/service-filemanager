@@ -6,7 +6,7 @@ use crate::error::ErrorKind::EntityGeneration;
 use crate::error::{Error, Result};
 use clap_builder::Parser;
 use quote::quote;
-use sea_orm_cli::{run_generate_command, Cli, Commands};
+use sea_orm_cli::{Cli, Commands, run_generate_command};
 use std::ffi::OsStr;
 use std::path::Path;
 use tokio::fs::write;
@@ -57,7 +57,7 @@ pub async fn generate_entities(
         );
 
         let out_file = out_dir.join("generated.rs");
-        write(out_file, format!("{}\n\n{}", generated_comment, generated)).await?;
+        write(out_file, format!("{generated_comment}\n\n{generated}")).await?;
     }
 
     Ok(())

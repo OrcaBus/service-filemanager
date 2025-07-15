@@ -4,7 +4,7 @@
 use aws_sdk_s3::types::ArchiveStatus as AwsArchiveStatus;
 use aws_sdk_s3::types::StorageClass as AwsStorageClass;
 use chrono::{DateTime, Utc};
-use itertools::{izip, Itertools};
+use itertools::{Itertools, izip};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
@@ -12,8 +12,8 @@ use uuid::Uuid;
 use message::EventMessage;
 
 use crate::database::entities::sea_orm_active_enums::{ArchiveStatus, Reason};
-use crate::events::aws::message::{default_version_id, EventType};
 use crate::events::aws::EventType::{Created, Deleted, Other};
+use crate::events::aws::message::{EventType, default_version_id};
 use crate::uuid::UuidGenerator;
 use sea_orm::prelude::Json;
 use sqlx::postgres::{PgHasArrayType, PgTypeInfo};
@@ -746,7 +746,7 @@ pub(crate) mod tests {
     use crate::events::aws::{
         EventType, FlatS3EventMessage, FlatS3EventMessages, TransposedS3EventMessages,
     };
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     pub(crate) const EXPECTED_SEQUENCER_CREATED_ZERO: &str = "0055AED6DCD90281E3"; // pragma: allowlist secret
     pub(crate) const EXPECTED_SEQUENCER_CREATED_ONE: &str = "0055AED6DCD90281E4"; // pragma: allowlist secret

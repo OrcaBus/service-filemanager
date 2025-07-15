@@ -5,8 +5,8 @@ use crate::error::Error::{MissingHostHeader, ParseError};
 use crate::error::{Error, Result};
 use aws_lambda_events::http::header::HOST;
 use axum::extract::{OriginalUri, Request};
-use axum::http::header::AsHeaderName;
 use axum::http::HeaderMap;
+use axum::http::header::AsHeaderName;
 use url::Url;
 
 pub struct HeaderParser<'a> {
@@ -43,9 +43,9 @@ impl<'a> HeaderParser<'a> {
         // A `HOST` is not a valid URL yet.
         if !host.starts_with("https://") && !host.starts_with("http://") {
             if use_tls_links {
-                host = format!("https://{}", host);
+                host = format!("https://{host}");
             } else {
-                host = format!("http://{}", host);
+                host = format!("http://{host}");
             }
         }
 

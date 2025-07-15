@@ -5,9 +5,9 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use crate::database::entities::s3_crawl::Model as Crawl;
+use axum::http::HeaderValue;
 use axum::http::header::InvalidHeaderName;
 use axum::http::method::InvalidMethod;
-use axum::http::HeaderValue;
 use axum::{Extension, Json, Router};
 use chrono::Duration;
 use serde_qs::axum::QsQueryConfig;
@@ -238,8 +238,8 @@ pub fn api_router(state: AppState) -> Result<Router> {
 mod tests {
     use std::sync::Arc;
 
-    use aws_lambda_events::http::header::ACCESS_CONTROL_ALLOW_HEADERS;
     use aws_lambda_events::http::Request;
+    use aws_lambda_events::http::header::ACCESS_CONTROL_ALLOW_HEADERS;
     use axum::body::Body;
     use axum::http::header::{
         ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN, ACCESS_CONTROL_REQUEST_HEADERS,
@@ -253,7 +253,7 @@ mod tests {
     use crate::database::aws::migration::tests::MIGRATOR;
     use crate::env::Config;
     use crate::error::Error;
-    use crate::routes::{router, AppState};
+    use crate::routes::{AppState, router};
 
     #[tokio::test]
     async fn internal_error_into_response() {
@@ -300,10 +300,12 @@ mod tests {
             )
             .await
             .unwrap();
-        assert!(response
-            .headers()
-            .get(ACCESS_CONTROL_ALLOW_ORIGIN)
-            .is_none());
+        assert!(
+            response
+                .headers()
+                .get(ACCESS_CONTROL_ALLOW_ORIGIN)
+                .is_none()
+        );
 
         let app = router(state.clone()).unwrap();
         let response = app

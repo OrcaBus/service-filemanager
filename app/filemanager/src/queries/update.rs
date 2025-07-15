@@ -1,7 +1,7 @@
 //! Query builder to handle updating record columns.
 //!
 
-use json_patch::{patch, PatchOperation};
+use json_patch::{PatchOperation, patch};
 use sea_orm::prelude::{Expr, Json};
 use sea_orm::sea_query::{
     Alias, Asterisk, CommonTableExpression, Query, SelectStatement, SimpleExpr, WithClause,
@@ -303,11 +303,11 @@ pub(crate) mod tests {
     use sea_orm::{ActiveModelTrait, IntoActiveModel};
     use sea_orm::{DatabaseConnection, Set};
     use serde_json::json;
-    use serde_json::{from_value, Value};
+    use serde_json::{Value, from_value};
     use sqlx::PgPool;
 
-    use crate::database::aws::migration::tests::MIGRATOR;
     use crate::database::Client;
+    use crate::database::aws::migration::tests::MIGRATOR;
     use crate::queries::{Entries, EntriesBuilder};
     use crate::routes::filter::wildcard::Wildcard;
     use crate::routes::filter::wildcard::WildcardEither;
@@ -812,15 +812,17 @@ pub(crate) mod tests {
     }
 
     async fn assert_ingest_id_error(client: &Client, patch: Value) {
-        assert!(test_s3_builder_result(
-            client,
-            Some(json!({
-                "attributeId": "1"
-            })),
-            from_value(patch).unwrap()
-        )
-        .await
-        .is_err());
+        assert!(
+            test_s3_builder_result(
+                client,
+                Some(json!({
+                    "attributeId": "1"
+                })),
+                from_value(patch).unwrap()
+            )
+            .await
+            .is_err()
+        );
     }
 
     async fn test_s3_builder_result(

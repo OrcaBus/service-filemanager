@@ -4,7 +4,7 @@
 use axum::extract::{Request, State};
 use axum::http::header::{CONTENT_ENCODING, CONTENT_TYPE};
 use axum::routing::get;
-use axum::{extract, Json, Router};
+use axum::{Json, Router, extract};
 use axum_extra::extract::WithRejection;
 use sea_orm::{ConnectionTrait, TransactionTrait};
 use url::Url;
@@ -16,12 +16,12 @@ use crate::error::Error::ExpectedSomeValue;
 use crate::error::Result;
 use crate::queries::get::GetQueryBuilder;
 use crate::queries::list::ListQueryBuilder;
+use crate::routes::AppState;
 use crate::routes::error::{ErrorStatusCode, Path, Query};
-use crate::routes::filter::wildcard::Wildcard;
 use crate::routes::filter::S3ObjectsFilter;
+use crate::routes::filter::wildcard::Wildcard;
 use crate::routes::header::HeaderParser;
 use crate::routes::presign::{PresignedParams, PresignedUrlBuilder};
-use crate::routes::AppState;
 
 async fn get_s3_from_connection<C>(
     connection: &C,
@@ -153,7 +153,7 @@ pub fn get_router() -> Router<AppState> {
 
 #[cfg(test)]
 mod tests {
-    use aws_smithy_mocks::{mock_client, RuleMode};
+    use aws_smithy_mocks::{RuleMode, mock_client};
     use axum::body::Body;
     use axum::http::{Method, StatusCode};
     use serde_json::Value;
@@ -163,10 +163,10 @@ mod tests {
     use crate::database::aws::migration::tests::MIGRATOR;
     use crate::env::Config;
     use crate::queries::EntriesBuilder;
+    use crate::routes::AppState;
     use crate::routes::list::tests::mock_get_object;
     use crate::routes::list::tests::{response_from, response_from_get};
     use crate::routes::presign::tests::assert_presigned_params;
-    use crate::routes::AppState;
     use crate::uuid::UuidGenerator;
 
     use super::*;

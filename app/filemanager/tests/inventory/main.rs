@@ -2,11 +2,11 @@
 
 use aws_sdk_s3::operation::get_object::GetObjectOutput;
 use aws_sdk_s3::primitives::ByteStream;
-use aws_smithy_mocks::{mock, mock_client, Rule, RuleMode};
+use aws_smithy_mocks::{Rule, RuleMode, mock, mock_client};
 
 use filemanager::clients::aws::s3::Client;
-use filemanager::events::aws::inventory::{Inventory, Record};
 use filemanager::events::aws::StorageClass;
+use filemanager::events::aws::inventory::{Inventory, Record};
 
 /// Create mocks for the inventory manifest and inventory files.
 macro_rules! base_mocks {

@@ -42,7 +42,7 @@ jobs:
       - run: corepack enable
 
       - name: Cache
-        uses: mozilla-actions/sccache-action@v0.10.0
+        uses: mozilla-actions/sccache-action@v0.0.9
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -73,7 +73,7 @@ jobs:
           fetch-depth: 0
 
       - name: Cache
-        uses: mozilla-actions/sccache-action@v0.10.0
+        uses: mozilla-actions/sccache-action@v0.0.9
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -101,7 +101,7 @@ jobs:
           fetch-depth: 0
 
       - name: Cache
-        uses: mozilla-actions/sccache-action@v0.10.0
+        uses: mozilla-actions/sccache-action@v0.0.9
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:

@@ -122,8 +122,7 @@ impl Wildcard {
                         if *next_char != '*' && *next_char != '?' && *next_char != '\\' =>
                     {
                         return Err(ParseError(format!(
-                            "invalid escape character: `\\{}`",
-                            next_char
+                            "invalid escape character: `\\{next_char}`"
                         )));
                     }
                     None => return Err(ParseError("invalid escape character".to_string())),
@@ -302,12 +301,16 @@ mod tests {
             r"t\_st"
         );
 
-        assert!(Wildcard::new(r"t\st".to_string())
-            .to_like_expression()
-            .is_err());
-        assert!(Wildcard::new(r"tes\".to_string())
-            .to_like_expression()
-            .is_err());
+        assert!(
+            Wildcard::new(r"t\st".to_string())
+                .to_like_expression()
+                .is_err()
+        );
+        assert!(
+            Wildcard::new(r"tes\".to_string())
+                .to_like_expression()
+                .is_err()
+        );
     }
 
     #[test]
@@ -405,11 +408,15 @@ mod tests {
             r"t\\st"
         );
 
-        assert!(Wildcard::new(r"t\st".to_string())
-            .to_eq_expression()
-            .is_err());
-        assert!(Wildcard::new(r"tes\".to_string())
-            .to_eq_expression()
-            .is_err());
+        assert!(
+            Wildcard::new(r"t\st".to_string())
+                .to_eq_expression()
+                .is_err()
+        );
+        assert!(
+            Wildcard::new(r"tes\".to_string())
+                .to_eq_expression()
+                .is_err()
+        );
     }
 }

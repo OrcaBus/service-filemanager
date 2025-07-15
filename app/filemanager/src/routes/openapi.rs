@@ -6,7 +6,7 @@ use crate::routes::crawl::CrawlRequest;
 use chrono::{DateTime, FixedOffset};
 use serde_json::Value;
 use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
-use utoipa::{openapi, Modify, OpenApi, ToSchema};
+use utoipa::{Modify, OpenApi, ToSchema, openapi};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::database::entities::s3_crawl::Model as Crawl;
@@ -136,8 +136,8 @@ mod tests {
 
     use super::*;
     use crate::database::aws::migration::tests::MIGRATOR;
-    use crate::routes::router;
     use crate::routes::AppState;
+    use crate::routes::router;
 
     #[sqlx::test(migrator = "MIGRATOR")]
     async fn get_swagger_ui(pool: PgPool) {

@@ -4,7 +4,7 @@
 use crate::clients::aws::s3::Client;
 use crate::database::entities::sea_orm_active_enums::Reason;
 use crate::error::Result;
-use crate::events::aws::message::{default_version_id, quote_e_tag, EventType};
+use crate::events::aws::message::{EventType, default_version_id, quote_e_tag};
 
 use crate::events::aws::{FlatS3EventMessage, FlatS3EventMessages};
 use crate::uuid::UuidGenerator;
@@ -100,11 +100,11 @@ impl From<ObjectVersion> for FlatS3EventMessage {
 pub(crate) mod tests {
     use super::*;
     use crate::events::aws::message::EventType::Created;
-    use crate::events::aws::tests::assert_flat_without_time;
     use crate::events::aws::tests::EXPECTED_QUOTED_E_TAG;
+    use crate::events::aws::tests::assert_flat_without_time;
     use aws_sdk_s3::operation::list_object_versions::ListObjectVersionsOutput;
-    use aws_smithy_mocks::{mock, mock_client};
     use aws_smithy_mocks::{Rule, RuleMode};
+    use aws_smithy_mocks::{mock, mock_client};
 
     #[tokio::test]
     async fn crawl_messages() {

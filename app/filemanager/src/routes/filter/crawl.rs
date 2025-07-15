@@ -2,9 +2,9 @@
 //!
 
 use crate::database::entities::sea_orm_active_enums::CrawlStatus;
-use crate::routes::filter::wildcard::{Wildcard, WildcardEither};
 use crate::routes::filter::FilterJoin;
 use crate::routes::filter::FilterJoinMerged;
+use crate::routes::filter::wildcard::{Wildcard, WildcardEither};
 use sea_orm::prelude::DateTimeWithTimeZone;
 use serde::{Deserialize, Serialize};
 use utoipa::IntoParams;

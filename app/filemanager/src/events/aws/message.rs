@@ -346,17 +346,17 @@ pub fn default_version_id() -> String {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
-    use crate::events::aws::message::quote_e_tag;
-    use crate::events::aws::message::EventType::Created;
-    use crate::events::aws::tests::{
-        assert_flat_s3_event, expected_event_bridge_record,
-        expected_event_bridge_record_delete_marker, expected_sqs_record, EXPECTED_E_TAG,
-        EXPECTED_REQUEST_ID, EXPECTED_SEQUENCER_DELETED_ONE, EXPECTED_VERSION_ID,
-    };
     use crate::events::aws::EventType::Deleted;
     use crate::events::aws::FlatS3EventMessages;
+    use crate::events::aws::message::EventType::Created;
+    use crate::events::aws::message::quote_e_tag;
+    use crate::events::aws::tests::{
+        EXPECTED_E_TAG, EXPECTED_REQUEST_ID, EXPECTED_SEQUENCER_DELETED_ONE, EXPECTED_VERSION_ID,
+        assert_flat_s3_event, expected_event_bridge_record,
+        expected_event_bridge_record_delete_marker, expected_sqs_record,
+    };
 
     #[test]
     fn test_e_tag_quoting() {

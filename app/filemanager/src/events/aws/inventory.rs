@@ -4,21 +4,21 @@
 use arrow::array::RecordBatch;
 use arrow::error::ArrowError;
 use arrow_json::ArrayWriter;
-use aws_arn::known::Service;
 use aws_arn::ResourceName;
+use aws_arn::known::Service;
 use aws_sdk_s3::types::InventoryFormat;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use csv::{ReaderBuilder, StringRecord, Trim};
 use flate2::read::MultiGzDecoder;
 use futures::future::join_all;
 use futures::{Stream, TryStreamExt};
-use orc_rust::error::OrcError;
 use orc_rust::ArrowReaderBuilder;
+use orc_rust::error::OrcError;
 use parquet::arrow::ParquetRecordBatchStreamBuilder;
 use parquet::errors::ParquetError;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::from_slice;
-use serde_with::{serde_as, DisplayFromStr};
+use serde_with::{DisplayFromStr, serde_as};
 use std::hash::{Hash, Hasher};
 use std::io::{BufReader, Cursor, Read};
 use std::result;
@@ -27,7 +27,7 @@ use crate::clients::aws::s3::Client;
 use crate::database::entities::sea_orm_active_enums::Reason;
 use crate::error::Error::S3Error;
 use crate::error::{Error, Result};
-use crate::events::aws::message::{default_version_id, quote_e_tag, EventType::Created};
+use crate::events::aws::message::{EventType::Created, default_version_id, quote_e_tag};
 use crate::events::aws::{FlatS3EventMessage, FlatS3EventMessages, StorageClass};
 use crate::uuid::UuidGenerator;
 
@@ -68,7 +68,7 @@ impl Inventory {
         let mut inventory_bytes = vec![];
         MultiGzDecoder::new(BufReader::new(body))
             .read_to_end(&mut inventory_bytes)
-            .map_err(|err| S3Error(format!("decompressing CSV: {}", err)))?;
+            .map_err(|err| S3Error(format!("decompressing CSV: {err}")))?;
 
         // AWS seems to return extra newlines at the end of the CSV, so we remove these
         let inventory_bytes = Self::trim_whitespace(inventory_bytes.as_slice());
@@ -132,7 +132,7 @@ impl Inventory {
         // This is should be similar to arrow2_convert::TryIntoArrow in the above performance graph,
         // as it is a port of arrow2_convert with arrow-rs as the dependency.
         from_slice::<Vec<Record>>(buf.as_slice())
-            .map_err(|err| S3Error(format!("failed to deserialize json from arrow: {}", err)))
+            .map_err(|err| S3Error(format!("failed to deserialize json from arrow: {err}")))
     }
 
     /// Parse a parquet manifest file into records.
@@ -172,7 +172,7 @@ impl Inventory {
     fn verify_md5<T: AsRef<[u8]>>(data: T, verify_with: T) -> Result<()> {
         if md5::compute(data).0
             != hex::decode(&verify_with)
-                .map_err(|err| S3Error(format!("decoding hex string: {}", err)))?
+                .map_err(|err| S3Error(format!("decoding hex string: {err}")))?
                 .as_slice()
         {
             return Err(S3Error(
@@ -574,11 +574,11 @@ pub(crate) mod tests {
     use crate::events::aws::tests::EXPECTED_E_TAG;
     use aws_sdk_s3::operation::get_object::GetObjectOutput;
     use aws_sdk_s3::primitives::ByteStream;
-    use aws_smithy_mocks::{mock, Rule};
+    use aws_smithy_mocks::{Rule, mock};
     use chrono::Days;
     use flate2::read::GzEncoder;
-    use serde_json::json;
     use serde_json::Value;
+    use serde_json::json;
 
     use super::*;
 
@@ -909,7 +909,7 @@ pub(crate) mod tests {
         expectations: &[Rule],
     ) -> (Client, String) {
         if let Some(headers) = headers {
-            data = format!("{}\n{}", headers, data);
+            data = format!("{headers}\n{data}");
         }
 
         let mut bytes = vec![];
@@ -933,7 +933,7 @@ pub(crate) mod tests {
             &[
                 &[mock!(aws_sdk_s3::Client::get_object)
                     .match_requests(move |req| {
-                        req.key() == Some(&format!("{}{}", MANIFEST_KEY, ending))
+                        req.key() == Some(&format!("{MANIFEST_KEY}{ending}"))
                             && req.bucket() == Some(MANIFEST_BUCKET)
                             && req.version_id().is_none()
                     })
@@ -979,11 +979,11 @@ pub(crate) mod tests {
         let ending = ending_from_format(&file_format);
 
         Manifest {
-            destination_bucket: format!("arn:aws:s3:::{}", MANIFEST_BUCKET),
+            destination_bucket: format!("arn:aws:s3:::{MANIFEST_BUCKET}"),
             file_format: file_format.clone(),
             file_schema,
             files: vec![File {
-                key: format!("{}{}", MANIFEST_KEY, ending),
+                key: format!("{MANIFEST_KEY}{ending}"),
                 md5_checksum,
             }],
         }

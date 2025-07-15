@@ -6,7 +6,7 @@ use std::fs::read_to_string;
 use std::panic::Location;
 use std::{fmt, io, result};
 
-use miette::{diagnostic, Diagnostic, NamedSource, SourceOffset};
+use miette::{Diagnostic, NamedSource, SourceOffset, diagnostic};
 use thiserror::Error;
 
 use crate::error::ErrorKind::IoError;

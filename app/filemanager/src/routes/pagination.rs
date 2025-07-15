@@ -224,9 +224,9 @@ mod tests {
     use crate::database::aws::migration::tests::MIGRATOR;
     use crate::database::entities::s3_object::Model as S3Object;
     use crate::queries::EntriesBuilder;
+    use crate::routes::AppState;
     use crate::routes::error::ErrorResponse;
     use crate::routes::list::tests::{response_from, response_from_get};
-    use crate::routes::AppState;
 
     use super::*;
 

@@ -9,8 +9,8 @@ use utoipa::ToSchema;
 
 use crate::error::Result;
 use crate::handlers::aws::receive_and_ingest;
-use crate::routes::error::ErrorStatusCode;
 use crate::routes::AppState;
+use crate::routes::error::ErrorStatusCode;
 
 /// The return value for ingest endpoints indicating how many records were processed.
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
@@ -60,7 +60,7 @@ mod tests {
 
     use crate::database::aws::migration::tests::MIGRATOR;
     use crate::handlers::aws::tests::test_receive_and_ingest_with;
-    use crate::routes::{api_router, AppState};
+    use crate::routes::{AppState, api_router};
 
     #[sqlx::test(migrator = "MIGRATOR")]
     async fn ingest_from_sqs_api(pool: PgPool) {

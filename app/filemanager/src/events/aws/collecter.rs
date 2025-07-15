@@ -24,8 +24,8 @@ use aws_sdk_s3::primitives;
 use aws_sdk_s3::types::StorageClass::Standard;
 use aws_sdk_s3::types::{Tag, Tagging};
 use chrono::{DateTime, Utc};
-use futures::future::join_all;
 use futures::TryFutureExt;
+use futures::future::join_all;
 use std::str::FromStr;
 use tracing::{trace, warn};
 use uuid::Uuid;
@@ -391,16 +391,16 @@ impl Collect for Collecter<'_> {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use aws_smithy_mocks::mock;
     use aws_smithy_mocks::Rule;
     use aws_smithy_mocks::RuleMode;
+    use aws_smithy_mocks::mock;
 
     use crate::database::aws::migration::tests::MIGRATOR;
-    use crate::events::aws::tests::{
-        expected_event_record_simple, expected_flat_events_simple, EXPECTED_SHA256,
-        EXPECTED_VERSION_ID,
-    };
     use crate::events::aws::StorageClass::IntelligentTiering;
+    use crate::events::aws::tests::{
+        EXPECTED_SHA256, EXPECTED_VERSION_ID, expected_event_record_simple,
+        expected_flat_events_simple,
+    };
 
     use aws_sdk_s3::operation::get_object_tagging::GetObjectTaggingError;
     use aws_sdk_s3::operation::head_object::HeadObjectError;
@@ -418,8 +418,8 @@ pub(crate) mod tests {
 
     use super::*;
     use crate::database::{Client, Ingest};
-    use crate::events::aws::message::default_version_id;
     use crate::events::aws::message::EventType::Created;
+    use crate::events::aws::message::default_version_id;
     use crate::handlers::aws::tests::s3_object_results;
     use crate::queries::EntriesBuilder;
 
@@ -553,7 +553,7 @@ pub(crate) mod tests {
         let mut collecter = test_collecter(&config, &client).await;
 
         collecter.raw_events = FlatS3EventMessages(vec![
-            expected_s3_event_message().with_version_id(EXPECTED_VERSION_ID.to_string())
+            expected_s3_event_message().with_version_id(EXPECTED_VERSION_ID.to_string()),
         ]);
         collecter.client = s3_client_expectations();
 
@@ -567,9 +567,11 @@ pub(crate) mod tests {
 
         let s3_object_results = s3_object_results(&pool).await;
         assert_eq!(s3_object_results.len(), 1);
-        assert!(s3_object_results[0]
-            .get::<Option<Uuid>, _>("ingest_id")
-            .is_some());
+        assert!(
+            s3_object_results[0]
+                .get::<Option<Uuid>, _>("ingest_id")
+                .is_some()
+        );
     }
 
     #[sqlx::test(migrator = "MIGRATOR")]
@@ -587,18 +589,20 @@ pub(crate) mod tests {
             .unwrap();
 
         collecter.raw_events = FlatS3EventMessages(vec![
-            expected_s3_event_message().with_version_id(default_version_id())
+            expected_s3_event_message().with_version_id(default_version_id()),
         ]);
         collecter.client = mock_s3(&[
             head_expectation(default_version_id(), expected_head_object()),
             get_tagging_expectation(
                 default_version_id(),
                 GetObjectTaggingOutput::builder()
-                    .set_tag_set(Some(vec![Tag::builder()
-                        .key("ingest_id")
-                        .value(ingest_id.to_string())
-                        .build()
-                        .unwrap()]))
+                    .set_tag_set(Some(vec![
+                        Tag::builder()
+                            .key("ingest_id")
+                            .value(ingest_id.to_string())
+                            .build()
+                            .unwrap(),
+                    ]))
                     .build()
                     .unwrap(),
             ),
@@ -646,7 +650,7 @@ pub(crate) mod tests {
         let mut collecter = test_collecter(&config, &client).await;
 
         collecter.raw_events = FlatS3EventMessages(vec![
-            expected_s3_event_message().with_version_id(default_version_id())
+            expected_s3_event_message().with_version_id(default_version_id()),
         ]);
 
         collecter.client = mock_s3(&[
@@ -670,9 +674,11 @@ pub(crate) mod tests {
 
         let s3_object_results = s3_object_results(&pool).await;
         assert_eq!(s3_object_results.len(), 1);
-        assert!(s3_object_results[0]
-            .get::<Option<Uuid>, _>("ingest_id")
-            .is_none());
+        assert!(
+            s3_object_results[0]
+                .get::<Option<Uuid>, _>("ingest_id")
+                .is_none()
+        );
     }
 
     #[sqlx::test(migrator = "MIGRATOR")]

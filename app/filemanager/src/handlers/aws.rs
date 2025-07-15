@@ -205,8 +205,8 @@ pub(crate) mod tests {
 
     use aws_lambda_events::sqs::SqsMessage;
     use chrono::DateTime;
-    use sqlx::postgres::PgRow;
     use sqlx::PgPool;
+    use sqlx::postgres::PgRow;
 
     use super::*;
     use crate::database::aws::ingester::tests::{
@@ -214,21 +214,20 @@ pub(crate) mod tests {
     };
     use crate::database::aws::migration::tests::MIGRATOR;
     use crate::database::entities::sea_orm_active_enums::{ArchiveStatus, Reason};
+    use crate::events::EventSourceType::S3;
+    use crate::events::aws::FlatS3EventMessage;
     use crate::events::aws::collecter::tests::{s3_client_expectations, sqs_client_expectations};
     use crate::events::aws::inventory::tests::{
-        csv_manifest_from_key_expectations, EXPECTED_LAST_MODIFIED_ONE,
-        EXPECTED_LAST_MODIFIED_THREE, EXPECTED_LAST_MODIFIED_TWO, EXPECTED_QUOTED_E_TAG_KEY_2,
-        MANIFEST_BUCKET,
+        EXPECTED_LAST_MODIFIED_ONE, EXPECTED_LAST_MODIFIED_THREE, EXPECTED_LAST_MODIFIED_TWO,
+        EXPECTED_QUOTED_E_TAG_KEY_2, MANIFEST_BUCKET, csv_manifest_from_key_expectations,
     };
-    use crate::events::aws::message::default_version_id;
     use crate::events::aws::message::EventType::Deleted;
+    use crate::events::aws::message::default_version_id;
     use crate::events::aws::tests::{
-        expected_event_record_simple, EXPECTED_QUOTED_E_TAG, EXPECTED_SEQUENCER_CREATED_ONE,
-        EXPECTED_SEQUENCER_CREATED_TWO, EXPECTED_SEQUENCER_DELETED_ONE, EXPECTED_SHA256,
-        EXPECTED_VERSION_ID,
+        EXPECTED_QUOTED_E_TAG, EXPECTED_SEQUENCER_CREATED_ONE, EXPECTED_SEQUENCER_CREATED_TWO,
+        EXPECTED_SEQUENCER_DELETED_ONE, EXPECTED_SHA256, EXPECTED_VERSION_ID,
+        expected_event_record_simple,
     };
-    use crate::events::aws::FlatS3EventMessage;
-    use crate::events::EventSourceType::S3;
 
     #[sqlx::test(migrator = "MIGRATOR")]
     async fn test_receive_and_ingest(pool: PgPool) {

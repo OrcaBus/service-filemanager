@@ -1,14 +1,14 @@
 use aws_lambda_events::cloudformation::provider::CloudFormationCustomResourceRequest;
-use aws_sdk_cloudformation::types::StackStatus;
 use aws_sdk_cloudformation::Client;
+use aws_sdk_cloudformation::types::StackStatus;
 use filemanager::clients::aws::config;
-use filemanager::database::aws::migration::Migration;
 use filemanager::database::Client as DbClient;
 use filemanager::database::Migrate;
+use filemanager::database::aws::migration::Migration;
 use filemanager::env::Config;
 use filemanager::handlers::aws::{create_database_pool, update_credentials};
 use filemanager::handlers::init_tracing;
-use lambda_runtime::{run, service_fn, Error, LambdaEvent};
+use lambda_runtime::{Error, LambdaEvent, run, service_fn};
 use tracing::trace;
 
 #[tokio::main]

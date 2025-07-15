@@ -46,8 +46,8 @@ where
 mod tests {
     use sqlx::PgPool;
 
-    use crate::database::aws::migration::tests::MIGRATOR;
     use crate::database::Client;
+    use crate::database::aws::migration::tests::MIGRATOR;
     use crate::queries::EntriesBuilder;
 
     use super::*;

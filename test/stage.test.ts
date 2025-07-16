@@ -21,6 +21,7 @@ function applyIAMWildcardSuppression(stack: Stack) {
           'Resource::arn:aws:s3:::archive-prod-analysis-503977275616-ap-southeast-2/*',
           'Resource::arn:aws:s3:::archive-prod-fastq-503977275616-ap-southeast-2/*',
           'Resource::arn:aws:s3:::ntsm-fingerprints-472057503814-ap-southeast-2/*',
+          'Resource::arn:aws:s3:::fastq-manager-sequali-outputs-472057503814-ap-southeast-2/*',
           'Resource::arn:aws:s3:::data-sharing-artifacts-472057503814-ap-southeast-2/*',
           'Resource::arn:aws:s3:::pipeline-montauk-977251586657-ap-southeast-2/*',
           'Resource::arn:aws:s3:::pipeline-prod-cache-503977275616-ap-southeast-2/*',

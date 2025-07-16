@@ -25,7 +25,7 @@
     "@aws-sdk/client-eventbridge": "^3.844.0",
     "@eslint/js": "^9.31.0",
     "@types/jest": "^30.0.0",
-    "@types/node": "^24.0.13",
+    "@types/node": "^24.0.14",
     "aws-cdk": "^2.1020.2",
     "cdk-nag": "^2.36.38",
     "eslint": "^9.31.0",
@@ -39,7 +39,7 @@
     "typescript-eslint": "^8.37.0"
   },
   "dependencies": {
-    "@orcabus/platform-cdk-constructs": "^0.0.38",
+    "@orcabus/platform-cdk-constructs": "0.0.41",
     "aws-cdk-lib": "^2.204.0",
     "cargo-lambda-cdk": "^0.0.33",
     "constructs": "^10.4.2"

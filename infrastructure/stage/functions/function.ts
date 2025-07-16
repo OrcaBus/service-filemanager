@@ -115,7 +115,7 @@ export class Function extends Construct {
           cargoLambdaFlags: ['--compiler', 'cargo'],
         }),
       },
-      memorySize: 128,
+      memorySize: 1024,
       timeout: props.timeout ?? Duration.seconds(28),
       environment: {
         // No password here, using RDS IAM to generate credentials.

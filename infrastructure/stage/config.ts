@@ -110,7 +110,7 @@ export const getFileManagerStatefulProps = (stage: StageName): FileManagerStatef
     accessKeyProps: {
       userName: FILE_MANAGER_PRESIGN_USER,
       secretName: FILE_MANAGER_PRESIGN_USER_SECRET,
-      policies: Function.formatPoliciesForBucket(buckets, [...Function.getObjectActions()]),
+      policies: [Function.formatPoliciesForBucket(buckets, [...Function.getObjectActions()])],
     },
     rules: getIngestRules(stage),
   };

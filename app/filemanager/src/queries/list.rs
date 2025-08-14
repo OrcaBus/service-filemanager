@@ -811,7 +811,7 @@ pub(crate) mod tests {
         assert_eq!(result, vec![expected]);
     }
 
-    fn builder_is_accessible(client: &Client) -> ListQueryBuilder<DatabaseConnection, Entity> {
+    fn builder_is_accessible(client: &Client) -> ListQueryBuilder<'_, DatabaseConnection, Entity> {
         ListQueryBuilder::<_, s3_object::Entity>::new(client.connection_ref())
             .filter_all(
                 S3ObjectsFilter {

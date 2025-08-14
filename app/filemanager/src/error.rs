@@ -98,11 +98,11 @@ impl From<TryFromIntError> for Error {
     }
 }
 
-impl<T> From<(SdkError<T>, String)> for Error
+impl<T> From<(&SdkError<T>, String)> for Error
 where
     T: ProvideErrorMetadata + error::Error + Send + Sync + 'static,
 {
-    fn from((err, call): (SdkError<T>, String)) -> Self {
+    fn from((err, call): (&SdkError<T>, String)) -> Self {
         Self::S3Error(format!(
             "{} for {}: {}",
             err.code().unwrap_or("Unknown"),
@@ -112,6 +112,15 @@ where
                 .or_else(|| err.as_service_error().map(|err| err.to_string()))
                 .unwrap_or_else(|| DisplayErrorContext(&err).to_string())
         ))
+    }
+}
+
+impl<T> From<(SdkError<T>, String)> for Error
+where
+    T: ProvideErrorMetadata + error::Error + Send + Sync + 'static,
+{
+    fn from((err, call): (SdkError<T>, String)) -> Self {
+        (&err, call).into()
     }
 }
 

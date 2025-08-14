@@ -829,7 +829,7 @@ pub(crate) mod tests {
         client: &Client,
         attributes: Option<Value>,
         patch_body: PatchBody,
-    ) -> Result<UpdateQueryBuilder<DatabaseConnection, s3_object::Entity>> {
+    ) -> Result<UpdateQueryBuilder<'_, DatabaseConnection, s3_object::Entity>> {
         UpdateQueryBuilder::<_, s3_object::Entity>::new(client.connection_ref())
             .filter_all(
                 S3ObjectsFilter {

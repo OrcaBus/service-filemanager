@@ -81,6 +81,17 @@ function applyStatelessNagSuppressions(stack: Stack) {
     ],
     false
   );
+  NagSuppressions.addResourceSuppressionsByPath(
+    stack,
+    `/FileManagerStatelessStack/LogRetentionaae0aa3c5b4d4f87b02d85b201efdd8a/ServiceRole/DefaultPolicy/Resource`,
+    [
+      {
+        id: 'AwsSolutions-IAM5',
+        reason: 'the alarm needs permission to cloudwatch',
+      },
+    ],
+    false
+  );
 }
 
 /**
@@ -125,7 +136,7 @@ function cdkNagStack(stack: Stack, applySuppressions: (stack: Stack) => void) {
   });
 }
 
-describe('cdk-nag-stateless-toolchain-stack', () => {
+describe('cdk-nag-stateless-stack', () => {
   const app = new App();
 
   const filemanagerStatelessStack = new FileManagerStack(app, 'FileManagerStatelessStack', {
@@ -143,7 +154,7 @@ describe('cdk-nag-stateless-toolchain-stack', () => {
   cdkNagStack(filemanagerStatelessStack, applyStatelessNagSuppressions);
 });
 
-describe('cdk-nag-stateful-toolchain-stack', () => {
+describe('cdk-nag-stateful-stack', () => {
   const app = new App({});
 
   const fileManagerStatefulStack = new FileManagerStatefulStack(app, 'FileManagerStatefulStack', {

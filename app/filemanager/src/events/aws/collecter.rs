@@ -17,7 +17,7 @@ use crate::queries::list::ListQueryBuilder;
 use crate::routes::filter::S3ObjectsFilter;
 use crate::uuid::UuidGenerator;
 use async_trait::async_trait;
-use aws_sdk_s3::error::BuildError;
+use aws_sdk_s3::error::{BuildError, ProvideErrorMetadata};
 use aws_sdk_s3::operation::get_object_tagging::GetObjectTaggingOutput;
 use aws_sdk_s3::operation::head_object::HeadObjectOutput;
 use aws_sdk_s3::primitives;
@@ -26,6 +26,7 @@ use aws_sdk_s3::types::{Tag, Tagging};
 use chrono::{DateTime, Utc};
 use futures::TryFutureExt;
 use futures::future::join_all;
+use std::error;
 use std::str::FromStr;
 use tracing::{trace, warn};
 use uuid::Uuid;
@@ -189,12 +190,29 @@ impl<'a> Collecter<'a> {
         }
     }
 
+    fn warn_except_not_found<T, F>(err: &aws_sdk_s3::error::SdkError<T>, print_warning: F)
+    where
+        T: ProvideErrorMetadata + error::Error + Send + Sync + 'static,
+        F: FnOnce(),
+    {
+        // We are only worried about permission and other errors, if the object cannot be found
+        // that's ok, it was probably deleted.
+        if err.meta().code().is_none_or(|code| code != "NotFound") {
+            print_warning();
+        }
+    }
+
     /// Gets S3 metadata from HeadObject such as creation/archival timestamps and statuses.
     pub async fn head(client: &S3Client, event: FlatS3EventMessage) -> Result<FlatS3EventMessage> {
         let head = client
             .head_object(&event.key, &event.bucket, &event.version_id)
             .inspect_err(|err| {
-                warn!("Error received from HeadObject: {}", err);
+                Self::warn_except_not_found(err, || {
+                    warn!(
+                        "Ingester Warning: {}",
+                        Error::from((err, "HeadObject".to_string()))
+                    )
+                });
             })
             .await
             .ok();
@@ -241,7 +259,12 @@ impl<'a> Collecter<'a> {
         let tagging = client
             .get_object_tagging(&event.key, &event.bucket, &event.version_id)
             .inspect_err(|err| {
-                warn!("Error received from GetObjectTagging: {}", err);
+                Self::warn_except_not_found(err, || {
+                    warn!(
+                        "Ingester Warning: {}",
+                        Error::from((err, "GetObjectTagging".to_string()))
+                    )
+                });
             })
             .await
             .ok();
@@ -279,7 +302,12 @@ impl<'a> Collecter<'a> {
                 )
                 .await
                 .inspect_err(|err| {
-                    warn!("Error received from PutObjectTagging: {}", err);
+                    Self::warn_except_not_found(err, || {
+                        warn!(
+                            "Ingester Warning: {}",
+                            Error::from((err, "PutObjectTagging".to_string()))
+                        )
+                    });
                 });
 
             // Only add a ingest_id to the new record if the tagging was successful.
@@ -290,10 +318,13 @@ impl<'a> Collecter<'a> {
             };
         };
 
-        // The object has a ingest_id tag. Grab the existing the tag, returning a new record without
+        // The object has an ingest_id tag. Grab the existing the tag, returning a new record without
         // the ingest_id if the is not valid.
         let ingest_id = Uuid::from_str(tag.value()).inspect_err(|err| {
-            warn!("Failed to parse ingest_id from tag: {}", err);
+            warn!(
+                "Ingester Warning: Failed to parse ingest_id from tag: {}",
+                err
+            );
         });
         let Ok(ingest_id) = ingest_id else {
             return Ok(event);
@@ -320,7 +351,10 @@ impl<'a> Collecter<'a> {
         if let Some(moved_object) = moved_object {
             Ok(event.with_attributes(moved_object.attributes))
         } else {
-            warn!("Object with ingest_id {} not found in database", ingest_id);
+            warn!(
+                "Ingester Warning: Object with ingest_id {} not found in database",
+                ingest_id
+            );
             Ok(event)
         }
     }

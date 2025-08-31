@@ -16,6 +16,7 @@ import {
   FILE_MANAGER_ACCESS_KEY_ARNS,
   FILE_MANAGER_BUCKETS,
   FILE_MANAGER_CACHE_BUCKETS,
+  FILE_MANAGER_CROSS_ACCOUNT_BUCKETS,
   FILE_MANAGER_DOMAIN_PREFIX,
   FILE_MANAGER_INGEST_ROLE,
   FILE_MANAGER_PRESIGN_USER,
@@ -23,8 +24,7 @@ import {
 } from '@orcabus/platform-cdk-constructs/shared-config/file-manager';
 
 export const getFileManagerStatelessProps = (stage: StageName): FileManagerStatelessConfig => {
-  const buckets = [...FILE_MANAGER_BUCKETS[stage], ...FILE_MANAGER_CACHE_BUCKETS[stage]];
-
+  const buckets = getAllowedBuckets(stage);
   return {
     securityGroupName: SHARED_SECURITY_GROUP_NAME,
     vpcProps: VPC_LOOKUP_PROPS,
@@ -101,16 +101,41 @@ export const getIngestRules = (stage: StageName): IngestRules[] => {
     });
   }
 
+  // Only the production filemanager deployment should ingest the cross account buckets for now,
+  // as the tagging needs to avoid race conditions.
+  if (stage == 'PROD') {
+    for (const bucket of FILE_MANAGER_CROSS_ACCOUNT_BUCKETS) {
+      rules.push({
+        bucket,
+        eventTypes,
+        patterns: ingestPattern(),
+      });
+    }
+  }
+
   return rules;
 };
 
+export const getAllowedBuckets = (stage: StageName): string[] => {
+  // The filemanager should have access to all cross account buckets, even if the ingester isn't running
+  // on them yet.
+  return [
+    ...FILE_MANAGER_BUCKETS[stage],
+    ...FILE_MANAGER_CACHE_BUCKETS[stage],
+    ...FILE_MANAGER_CROSS_ACCOUNT_BUCKETS,
+  ];
+};
+
 export const getFileManagerStatefulProps = (stage: StageName): FileManagerStatefulConfig => {
-  const buckets = [...FILE_MANAGER_BUCKETS[stage], ...FILE_MANAGER_CACHE_BUCKETS[stage]];
   return {
     accessKeyProps: {
       userName: FILE_MANAGER_PRESIGN_USER,
       secretName: FILE_MANAGER_PRESIGN_USER_SECRET,
-      policies: [Function.formatPoliciesForBucket(buckets, [...Function.getObjectActions()])],
+      policies: [
+        Function.formatPoliciesForBucket(getAllowedBuckets(stage), [
+          ...Function.getObjectActions(),
+        ]),
+      ],
     },
     rules: getIngestRules(stage),
   };

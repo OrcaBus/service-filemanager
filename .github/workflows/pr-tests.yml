@@ -78,7 +78,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - uses: mlugg/setup-zig@v2
       - run: curl -fsSL https://cargo-lambda.info/install.sh | sh
 
       - uses: pnpm/action-setup@v4

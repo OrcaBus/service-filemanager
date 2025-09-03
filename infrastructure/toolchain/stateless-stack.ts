@@ -52,7 +52,6 @@ export class StatelessStack extends cdk.Stack {
               "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y",
               'source $HOME/.cargo/env',
               'rustup component add rustfmt',
-              'npm install -g @ziglang/cli',
               'curl -fsSL https://cargo-lambda.info/install.sh | sh',
             ],
           },

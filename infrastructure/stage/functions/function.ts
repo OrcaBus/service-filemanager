@@ -6,7 +6,6 @@ import { ManagedPolicy, PolicyStatement, Role } from 'aws-cdk-lib/aws-iam';
 import { RustFunction } from 'cargo-lambda-cdk';
 import path from 'path';
 import { FILEMANAGER_SERVICE_NAME, RDS_POLICY_NAME } from '../constants';
-import { spawnSync } from 'node:child_process';
 import { NamedLambdaRole } from '@orcabus/platform-cdk-constructs/named-lambda-role';
 
 /**
@@ -98,12 +97,6 @@ export class Function extends Construct {
     });
 
     const manifestPath = path.join(__dirname, '..', '..', '..', 'app');
-    const defaultTarget = spawnSync('rustc', ['--version', '--verbose'])
-      .stdout.toString()
-      .split(/\r?\n/)
-      .find((line) => line.startsWith('host:'))
-      ?.replace('host:', '')
-      .trim();
     this._function = new RustFunction(this, 'RustFunction', {
       manifestPath: manifestPath,
       binaryName: props.package,
@@ -111,9 +104,7 @@ export class Function extends Construct {
         environment: {
           ...props.buildEnvironment,
         },
-        ...(defaultTarget === 'aarch64-unknown-linux-gnu' && {
-          cargoLambdaFlags: ['--compiler', 'cargo'],
-        }),
+        cargoLambdaFlags: ['--compiler', 'cargo'],
       },
       memorySize: 1024,
       timeout: props.timeout ?? Duration.seconds(28),

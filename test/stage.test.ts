@@ -27,6 +27,7 @@ function applyIAMWildcardSuppression(stack: Stack) {
           'Resource::arn:aws:s3:::pipeline-prod-cache-503977275616-ap-southeast-2/*',
           'Resource::arn:aws:s3:::research-data-550435500918-ap-southeast-2/*',
           'Resource::arn:aws:s3:::test-data-503977275616-ap-southeast-2/*',
+          'Resource::arn:aws:s3:::project-data-889522050439-ap-southeast-2/*',
         ],
       },
     ],

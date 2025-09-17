@@ -10,5 +10,5 @@ curl -H "Authorization: Bearer $orcabus_api_token" https://file.<stage>.umccr.or
 
 View the [API_GUIDE.md][api-guide] for more information about the filemanager API.
 
-[api-guide]: ../docs/API_GUIDE.md
+[api-guide]: ../../docs/operation/API_GUIDE.md
 [filemanager-api-server]: ../filemanager-api-server

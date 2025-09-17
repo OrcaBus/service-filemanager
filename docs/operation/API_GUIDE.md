@@ -71,10 +71,10 @@ curl -H "Authorization: Bearer $TOKEN" "https://file.dev.umccr.org/api/v1/s3?pag
 ```
 
 The records can be filtered using the same fields from the record by naming the field in a query parameter.
-For example, query all records for a certain bucket:
+For example, query all records for a certain bucket and key:
 
 ```sh
-curl -H "Authorization: Bearer $TOKEN" "https://file.dev.umccr.org/api/v1/s3?bucket=umccr-temp-dev" | jq
+curl -H "Authorization: Bearer $TOKEN" "https://file.dev.umccr.org/api/v1/s3?bucket=umccr-temp-dev&key=test_key" | jq
 ```
 
 Since the filemanager database keeps a copy of all S3 events that it receives, old records for deleted objects
@@ -307,5 +307,5 @@ curl -H "Authorization: Bearer $TOKEN" "https://file.dev.umccr.org/api/v1/s3/cra
 [json-patch]: https://jsonpatch.com/
 [qs]: https://github.com/ljharb/qs
 [s3-events]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/EventNotifications.html
-[attribute-linking]: ATTRIBUTE_LINKING.md
+[attribute-linking]: ../architecture/ATTRIBUTE_LINKING.md
 [here]: ../../htsget/README.md

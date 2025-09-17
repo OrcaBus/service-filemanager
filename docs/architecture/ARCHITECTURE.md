@@ -106,7 +106,7 @@ ingestion fails. In practice, the padding is set large enough so that it will ne
 `PAIRED_INGEST_MODE` does not support S3 events like lifecycle transitions because they do not represent true `Created`
 events.
 
-[events]: ../filemanager/src/events
+[events]: ../../app/filemanager/src/events
 [s3-events]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/EventNotifications.html
 [s3-inventory]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/storage-inventory.html
-[inventory-implementation]: ../filemanager-inventory-lambda/README.md#implementation
+[inventory-implementation]: ../../app/filemanager-inventory-lambda/README.md#implementation

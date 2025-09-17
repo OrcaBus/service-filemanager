@@ -1,8 +1,8 @@
 ### FileManager documentation
 
-For documentation related to the filemanager API or architecture, see the app [docs][app-docs].
+Documentation related to the filemanager API or architecture.
 
-This directory contains SOPs for the filemanager under the sop directory.
+The [operation] directory contains SOPs and [API_GUIDE.md][api-guide] contains usage examples.
 
-[sop]: sop
-[app-docs]: ../app/docs
+[operation]: operation/sop
+[api-guide]: operation/API_GUIDE.md

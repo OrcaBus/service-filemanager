@@ -37,6 +37,14 @@ impl Query {
         ))
     }
 
+    pub async fn select_all_by_bucket_key(
+        &self,
+        conn: &mut PgConnection,
+        buckets: &[String],
+        keys: &[String],
+        version_ids: &[String],
+    )
+
     pub async fn reset_current_state(
         &self,
         conn: &mut PgConnection,

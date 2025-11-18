@@ -367,7 +367,7 @@ impl From<FlatS3EventMessages> for Events {
 }
 
 /// Flattened AWS S3 events
-#[derive(Debug, Deserialize, Eq, PartialEq, Default)]
+#[derive(Debug, Deserialize, Eq, PartialEq, Default, Clone)]
 #[serde(from = "EventMessage")]
 pub struct FlatS3EventMessages(pub Vec<FlatS3EventMessage>);
 

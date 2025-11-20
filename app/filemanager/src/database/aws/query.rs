@@ -157,6 +157,27 @@ mod tests {
             .0
     }
 
+    async fn query_all(
+        new_key: &String,
+        query: &Query,
+        conn: &mut PgConnection,
+    ) -> Vec<FlatS3EventMessage> {
+        query
+            .select_all_by_bucket_key(
+                conn,
+                vec!["bucket".to_string(), "bucket".to_string()].as_slice(),
+                vec!["key".to_string(), new_key.to_string()].as_slice(),
+                vec![
+                    EXPECTED_VERSION_ID.to_string(),
+                    EXPECTED_VERSION_ID.to_string(),
+                ]
+                    .as_slice(),
+            )
+            .await
+            .unwrap()
+            .0
+    }
+
     async fn query_reset_current_state(
         new_key: &String,
         query: &Query,
@@ -201,6 +222,33 @@ mod tests {
         assert!(results.get(1).iter().all(|result| result.bucket == "bucket"
             && result.key == new_key
             && result.event_time == new_date));
+    }
+
+    #[sqlx::test(migrator = "MIGRATOR")]
+    async fn test_select_all_by_bucket_key(pool: PgPool) {
+        let (new_key, _) = ingest_test_records(pool.clone()).await;
+        let client = Client::from_pool(pool);
+        let query = Query::new(client);
+
+        let mut tx = query.client.pool().begin().await.unwrap();
+        let results = query_all(&new_key, &query, &mut tx).await;
+        tx.commit().await.unwrap();
+
+        assert_eq!(results.len(), 4);
+
+        let (key, new_key) = results.split_at(2);
+        assert!(
+            key
+                .iter()
+                .all(|result| result.bucket == "bucket"
+                    && result.key == "key")
+        );
+        assert!(
+            new_key
+                .iter()
+                .all(|result| result.bucket == "bucket"
+                    && result.key == "key1")
+        );
     }
 
     #[sqlx::test(migrator = "MIGRATOR")]

@@ -281,22 +281,6 @@ pub(crate) mod tests {
                 .with_sequencer(None),
             generate_record()
                 .with_event_type(Created)
-                .with_sequencer(Some("3".to_string()))
-                .with_ingest_id(Some(Uuid::default())),
-            generate_record()
-                .with_event_type(Deleted)
-                .with_sequencer(Some("4".to_string()))
-                .with_ingest_id(Some(Uuid::default())),
-            generate_record()
-                .with_event_type(Created)
-                .with_sequencer(None)
-                .with_ingest_id(Some(Uuid::default())),
-            generate_record()
-                .with_event_type(Deleted)
-                .with_sequencer(None)
-                .with_ingest_id(Some(Uuid::default())),
-            generate_record()
-                .with_event_type(Created)
                 .with_sequencer(Some("5".to_string()))
                 .with_storage_class(Some(Standard)),
             generate_record()

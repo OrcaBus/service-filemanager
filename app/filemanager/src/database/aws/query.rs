@@ -171,7 +171,7 @@ mod tests {
                     EXPECTED_VERSION_ID.to_string(),
                     EXPECTED_VERSION_ID.to_string(),
                 ]
-                    .as_slice(),
+                .as_slice(),
             )
             .await
             .unwrap()
@@ -238,16 +238,13 @@ mod tests {
 
         let (key, new_key) = results.split_at(2);
         assert!(
-            key
-                .iter()
-                .all(|result| result.bucket == "bucket"
-                    && result.key == "key")
+            key.iter()
+                .all(|result| result.bucket == "bucket" && result.key == "key")
         );
         assert!(
             new_key
                 .iter()
-                .all(|result| result.bucket == "bucket"
-                    && result.key == "key1")
+                .all(|result| result.bucket == "bucket" && result.key == "key1")
         );
     }
 

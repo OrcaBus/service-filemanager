@@ -605,7 +605,7 @@ mod tests {
         entries.s3_objects[0].ingest_id = Some(Uuid::default());
         entries.s3_objects[1].ingest_id = None;
 
-        assert_contains(&vec![s3_objects], &entries, 0..1);
+        assert_contains(&[s3_objects], &entries, 0..1);
         assert_correct_records(client, entries.clone()).await;
 
         let patch = json!({
@@ -627,7 +627,7 @@ mod tests {
             Some("00000000-0000-0000-0000-000000000001".parse().unwrap());
         entries.s3_objects[1].ingest_id = None;
 
-        assert_contains(&vec![s3_objects], &entries, 0..1);
+        assert_contains(&[s3_objects], &entries, 0..1);
         assert_correct_records(client, entries.clone()).await;
 
         let patch = json!({
@@ -648,7 +648,7 @@ mod tests {
         entries.s3_objects[0].ingest_id = None;
         entries.s3_objects[1].ingest_id = None;
 
-        assert_contains(&vec![s3_objects], &entries, 0..1);
+        assert_contains(&[s3_objects], &entries, 0..1);
         assert_correct_records(client, entries).await;
     }
 
@@ -1016,7 +1016,7 @@ mod tests {
         entries_many(&mut entries, &[2], json!({"attributeId": "2"}));
         entries.s3_objects[2].ingest_id = Some(Uuid::default());
 
-        assert_contains(&vec![s3_objects], &entries, 2..3);
+        assert_contains(&[s3_objects], &entries, 2..3);
         assert_correct_records(client, entries).await;
     }
 

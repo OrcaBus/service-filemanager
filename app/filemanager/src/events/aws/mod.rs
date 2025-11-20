@@ -72,6 +72,7 @@ impl StorageClass {
     }
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for Reason {
     fn default() -> Self {
         Self::Unknown

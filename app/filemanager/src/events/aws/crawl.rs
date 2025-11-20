@@ -101,9 +101,7 @@ pub(crate) mod tests {
     use super::*;
     use crate::database;
     use crate::database::Ingest;
-    use crate::database::aws::ingester::tests::{
-        assert_row, expected_message, fetch_results_ordered, test_ingester,
-    };
+    use crate::database::aws::ingester::tests::test_ingester;
     use crate::database::aws::migration::tests::MIGRATOR;
     use crate::events::Collect;
     use crate::events::EventSourceType;
@@ -111,25 +109,20 @@ pub(crate) mod tests {
     use crate::events::aws::StorageClass::Standard;
     use crate::events::aws::collecter::CollecterBuilder;
     use crate::events::aws::collecter::tests::{
-        expected_get_object_tagging, expected_head_object, expected_put_object_tagging,
-        get_tagging_expectation, head_expectation, mock_s3, put_tagging_expectation,
-        s3_client_expectations, sqs_client_expectations,
+        expected_put_object_tagging, get_tagging_expectation, head_expectation, mock_s3,
+        put_tagging_expectation,
     };
     use crate::events::aws::message::EventType::{Created, Deleted};
+    use crate::events::aws::tests::EXPECTED_QUOTED_E_TAG;
     use crate::events::aws::tests::assert_flat_without_time;
-    use crate::events::aws::tests::{EXPECTED_QUOTED_E_TAG, EXPECTED_SHA256, EXPECTED_VERSION_ID};
     use aws_sdk_s3::operation::get_object_tagging::GetObjectTaggingOutput;
     use aws_sdk_s3::operation::head_object::HeadObjectOutput;
     use aws_sdk_s3::operation::list_object_versions::ListObjectVersionsOutput;
-    use aws_sdk_s3::primitives::DateTimeFormat;
+    use aws_sdk_s3::types;
     use aws_sdk_s3::types::Tag;
-    use aws_sdk_s3::{primitives, types};
     use aws_smithy_mocks::{Rule, RuleMode};
     use aws_smithy_mocks::{mock, mock_client};
-    use chrono::Duration;
     use itertools::Itertools;
-    use sea_orm::Iden;
-    use sqlx::__rt::sleep;
     use sqlx::{Executor, PgPool, Row};
     use std::str::FromStr;
     use uuid::Uuid;

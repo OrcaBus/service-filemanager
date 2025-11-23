@@ -162,16 +162,15 @@ pub(crate) mod tests {
         test_crawl_record_states(pool, None).await
     }
 
-    // #[sqlx::test(migrator = "MIGRATOR")]
-    // async fn crawl_message_always_latest_version_id(pool: PgPool) {
-    //     test_crawl_record_states(pool, Some("version_id".to_string())).await
-    // }
+    #[sqlx::test(migrator = "MIGRATOR")]
+    async fn crawl_message_always_latest_version_id(pool: PgPool) {
+        test_crawl_record_states(pool, Some("version_id".to_string())).await
+    }
 
     async fn test_crawl_record_states(pool: PgPool, version_id: Option<String>) {
         let default_version_id = version_id.clone().unwrap_or(default_version_id());
         let records = crawl_record_states(default_version_id.clone());
         for (i, record) in records.into_iter().enumerate() {
-            println!("{:#?}", i);
             let ingester = test_ingester(pool.clone());
             ingester
                 .ingest(EventSourceType::S3(FlatS3EventMessages(record).into()))

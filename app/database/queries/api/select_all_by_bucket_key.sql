@@ -39,9 +39,9 @@ select
     is_current_state,
     0::bigint as "number_reordered"
 from input
--- Grab the most recent object in each input group.
+-- Grab all objects in each input group.
 cross join lateral (
-    -- Cross join the input with one s3_object based on the most recent event.
+    -- Cross join the input with all s3_objects.
     select
         *
     from s3_object

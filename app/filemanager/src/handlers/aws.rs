@@ -17,9 +17,10 @@ use crate::env::Config as EnvConfig;
 use crate::error::Error::ConfigError;
 use crate::error::Result;
 use crate::events::aws::collecter::CollecterBuilder;
-use crate::events::aws::inventory::{DiffMessages, Inventory, Manifest};
+use crate::events::aws::inventory::{Inventory, Manifest};
+use crate::events::aws::message::EventType;
 use crate::events::aws::message::EventType::Created;
-use crate::events::aws::{FlatS3EventMessages, TransposedS3EventMessages};
+use crate::events::aws::{DiffMessages, FlatS3EventMessages, TransposedS3EventMessages};
 use crate::events::{Collect, EventSourceType};
 
 /// Handle SQS events by manually calling the SQS receive function. This is meant
@@ -133,6 +134,13 @@ pub async fn ingest_s3_inventory(
         database_records
             .0
             .into_iter()
+            .map(|mut record| {
+                // Take the difference between what is in the inventory, and the current database state.
+                // All records that are not in the inventory, but are in the database represent records that
+                // should be deleted from the database.
+                record.event_type = EventType::Deleted;
+                record
+            })
             .filter(|record| record.event_type == Created)
             .collect(),
     );
@@ -145,9 +153,11 @@ pub async fn ingest_s3_inventory(
     let database_records: HashSet<DiffMessages> =
         HashSet::from_iter(Vec::<DiffMessages>::from(database_records));
 
-    // Note, it isn't strictly necessary to perform a diff as the database will handle duplicate
-    // records, however this saves some unnecessary database processing.
-    let diff = &transposed_events - &database_records;
+    // The symmetric difference keeps the records that need to be deleted from the database.
+    let diff = transposed_events
+        .symmetric_difference(&database_records)
+        .cloned()
+        .collect_vec();
 
     if diff.is_empty() {
         debug!("no diff found between database and inventory");
@@ -161,7 +171,7 @@ pub async fn ingest_s3_inventory(
         // unless the state of the S3 bucket was kept the same.
         // TODO: add option to check for object existence with HeadObject before ingesting.
         let events = EventSourceType::S3(TransposedS3EventMessages::from(
-            FlatS3EventMessages::from(diff.into_iter().collect_vec()),
+            FlatS3EventMessages::from(diff),
         ));
 
         database_client.ingest(events).await?;

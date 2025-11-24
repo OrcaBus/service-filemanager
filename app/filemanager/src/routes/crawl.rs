@@ -2,10 +2,10 @@
 //!
 
 use crate::database::Ingest;
-use crate::database::entities::s3_crawl;
 use crate::database::entities::s3_crawl::Model as Crawl;
 use crate::database::entities::sea_orm_active_enums::CrawlStatus;
 use crate::database::entities::sea_orm_active_enums::CrawlStatus::InProgress;
+use crate::database::entities::{s3_crawl, s3_object};
 use crate::error::Error::{CrawlError, ExpectedSomeValue};
 use crate::error::{Error, Result};
 use crate::events::Collect;
@@ -130,9 +130,9 @@ pub async fn crawl_sync_s3(
     state: State<AppState>,
     WithRejection(extract::Json(crawl), _): Json<CrawlRequest>,
 ) -> Result<extract::Json<Crawl>> {
-    let conn = state.database_client().connection_ref();
+    let conn = state.database_client().connection_ref().begin().await?;
 
-    let in_progress = ListQueryBuilder::<_, s3_crawl::Entity>::new(conn)
+    let in_progress = ListQueryBuilder::<_, s3_crawl::Entity>::new(&conn)
         .filter_all(
             S3CrawlFilter {
                 bucket: Wildcard::new(crawl.bucket.to_string()).into(),
@@ -151,7 +151,7 @@ pub async fn crawl_sync_s3(
         if diff < TimeDelta::zero() || diff > TimeDelta::minutes(MAX_CRAWL_TIME_MINUTES) {
             let mut to_update = in_progress.into_active_model();
             to_update.status = Set(CrawlStatus::Failed);
-            to_update.update(conn).await?;
+            to_update.update(&conn).await?;
         } else {
             return Err(CrawlError(format!(
                 "another crawl on {} is already in progress",
@@ -169,18 +169,36 @@ pub async fn crawl_sync_s3(
         status: Set(InProgress),
         ..Default::default()
     };
-    crawl_execution.clone().insert(conn).await?;
+    crawl_execution.clone().insert(&conn).await?;
 
     let now = Utc::now();
     let set_failed = |mut to_update: s3_crawl::ActiveModel| async {
         to_update.status = Set(CrawlStatus::Failed);
-        Ok::<_, Error>(to_update.update(conn).await?)
+        Ok::<_, Error>(to_update.update(&conn).await?)
     };
 
-    // Get crawl list object details.
-    let crawl = crawl::Crawl::new(state.s3_client().clone())
+    // Get crawl list object details ensuring that the current database state is taken into account.
+    let database_state = ListQueryBuilder::<_, s3_object::Entity>::new(&conn)
+        .filter_all(
+            S3ObjectsFilter {
+                bucket: Wildcard::new(crawl.bucket.to_string()).into(),
+                key: Wildcard::new(format!(
+                    "{}{}",
+                    crawl.prefix.clone().unwrap_or_default(),
+                    "*"
+                ))
+                .into(),
+                ..Default::default()
+            },
+            true,
+            true,
+        )?
+        .all()
+        .await?;
+    let crawl = crawl::Crawl::new(state.s3_client().clone(), database_state)
         .crawl_s3(&crawl.bucket, crawl.prefix)
         .await;
+
     if let Err(err) = crawl {
         set_failed(crawl_execution).await?;
         return Err(err);
@@ -215,10 +233,10 @@ pub async fn crawl_sync_s3(
         now.signed_duration_since(Utc::now()).abs().num_seconds(),
     )?));
     crawl_execution.n_objects = Set(Some(n_events));
-    crawl_execution.clone().update(conn).await?;
+    crawl_execution.clone().update(&conn).await?;
 
     let entry = s3_crawl::Entity::find_by_id(uuid)
-        .one(conn)
+        .one(&conn)
         .await?
         .ok_or_else(|| CrawlError("expected crawl entry".to_string()))?;
     Ok(extract::Json(entry))

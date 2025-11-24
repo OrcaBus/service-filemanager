@@ -119,7 +119,7 @@ pub async fn ingest_s3_inventory(
 
     let mut tx = query.transaction().await?;
     let database_records = query
-        .select_existing_by_bucket_key(
+        .select_current_by_bucket_key(
             &mut tx,
             transposed_events.buckets.as_slice(),
             transposed_events.keys.as_slice(),

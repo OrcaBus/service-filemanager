@@ -18,7 +18,7 @@ impl Query {
 
     /// Selects existing objects by the bucket and key for update. This does not start a transaction.
     /// TODO, ideally this should use some better types. Potentially use sea-orm codegen to simplify queries.
-    pub async fn select_existing_by_bucket_key(
+    pub async fn select_current_by_bucket_key(
         &self,
         conn: &mut PgConnection,
         buckets: &[String],
@@ -27,7 +27,26 @@ impl Query {
     ) -> Result<FlatS3EventMessages> {
         Ok(FlatS3EventMessages(
             query_as::<_, FlatS3EventMessage>(include_str!(
-                "../../../../database/queries/api/select_existing_by_bucket_key.sql"
+                "../../../../database/queries/api/select_current_by_bucket_key.sql"
+            ))
+            .bind(buckets)
+            .bind(keys)
+            .bind(version_ids)
+            .fetch_all(conn)
+            .await?,
+        ))
+    }
+
+    pub async fn select_all_by_bucket_key(
+        &self,
+        conn: &mut PgConnection,
+        buckets: &[String],
+        keys: &[String],
+        version_ids: &[String],
+    ) -> Result<FlatS3EventMessages> {
+        Ok(FlatS3EventMessages(
+            query_as::<_, FlatS3EventMessage>(include_str!(
+                "../../../../database/queries/api/select_all_by_bucket_key.sql"
             ))
             .bind(buckets)
             .bind(keys)
@@ -123,7 +142,28 @@ mod tests {
         conn: &mut PgConnection,
     ) -> Vec<FlatS3EventMessage> {
         query
-            .select_existing_by_bucket_key(
+            .select_current_by_bucket_key(
+                conn,
+                vec!["bucket".to_string(), "bucket".to_string()].as_slice(),
+                vec!["key".to_string(), new_key.to_string()].as_slice(),
+                vec![
+                    EXPECTED_VERSION_ID.to_string(),
+                    EXPECTED_VERSION_ID.to_string(),
+                ]
+                .as_slice(),
+            )
+            .await
+            .unwrap()
+            .0
+    }
+
+    async fn query_all(
+        new_key: &String,
+        query: &Query,
+        conn: &mut PgConnection,
+    ) -> Vec<FlatS3EventMessage> {
+        query
+            .select_all_by_bucket_key(
                 conn,
                 vec!["bucket".to_string(), "bucket".to_string()].as_slice(),
                 vec!["key".to_string(), new_key.to_string()].as_slice(),
@@ -161,7 +201,7 @@ mod tests {
     }
 
     #[sqlx::test(migrator = "MIGRATOR")]
-    async fn test_select_existing_by_bucket_key(pool: PgPool) {
+    async fn test_select_current_by_bucket_key(pool: PgPool) {
         let (new_key, new_date) = ingest_test_records(pool.clone()).await;
         let client = Client::from_pool(pool);
         let query = Query::new(client);
@@ -182,6 +222,30 @@ mod tests {
         assert!(results.get(1).iter().all(|result| result.bucket == "bucket"
             && result.key == new_key
             && result.event_time == new_date));
+    }
+
+    #[sqlx::test(migrator = "MIGRATOR")]
+    async fn test_select_all_by_bucket_key(pool: PgPool) {
+        let (new_key, _) = ingest_test_records(pool.clone()).await;
+        let client = Client::from_pool(pool);
+        let query = Query::new(client);
+
+        let mut tx = query.client.pool().begin().await.unwrap();
+        let results = query_all(&new_key, &query, &mut tx).await;
+        tx.commit().await.unwrap();
+
+        assert_eq!(results.len(), 4);
+
+        let (key, new_key) = results.split_at(2);
+        assert!(
+            key.iter()
+                .all(|result| result.bucket == "bucket" && result.key == "key")
+        );
+        assert!(
+            new_key
+                .iter()
+                .all(|result| result.bucket == "bucket" && result.key == "key1")
+        );
     }
 
     #[sqlx::test(migrator = "MIGRATOR")]

@@ -90,9 +90,9 @@ impl Ingester {
         events: TransposedS3EventMessages,
         conn: &mut PgConnection,
     ) -> Result<TransposedS3EventMessages> {
-        // Get the current state of records to find the most recent sequencer.
+        // Get all of records to find the most recent sequencer.
         let current = query
-            .select_existing_by_bucket_key(conn, &events.buckets, &events.keys, &events.version_ids)
+            .select_all_by_bucket_key(conn, &events.buckets, &events.keys, &events.version_ids)
             .await?;
 
         let mut events = FlatS3EventMessages::from(events);

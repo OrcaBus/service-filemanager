@@ -19,7 +19,6 @@ use parquet::errors::ParquetError;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::from_slice;
 use serde_with::{DisplayFromStr, serde_as};
-use std::hash::{Hash, Hasher};
 use std::io::{BufReader, Cursor, Read};
 use std::result;
 
@@ -532,43 +531,11 @@ impl From<Record> for FlatS3EventMessage {
     }
 }
 
-/// A wrapper around event messages to allow for calculating a diff compared to the database
-/// state. Checks for equality using the bucket, key and version_id.
-#[derive(Debug, Eq, Clone)]
-pub struct DiffMessages(FlatS3EventMessage);
-
-impl Hash for DiffMessages {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.bucket.hash(state);
-        self.0.key.hash(state);
-        self.0.version_id.hash(state);
-    }
-}
-
-impl PartialEq for DiffMessages {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.bucket == other.0.bucket
-            && self.0.key == other.0.key
-            && self.0.version_id == other.0.version_id
-    }
-}
-
-impl From<FlatS3EventMessages> for Vec<DiffMessages> {
-    fn from(value: FlatS3EventMessages) -> Self {
-        value.0.into_iter().map(DiffMessages).collect()
-    }
-}
-
-impl From<Vec<DiffMessages>> for FlatS3EventMessages {
-    fn from(value: Vec<DiffMessages>) -> Self {
-        Self(value.into_iter().map(|diff| diff.0).collect())
-    }
-}
-
 #[cfg(test)]
 pub(crate) mod tests {
     use std::collections::HashSet;
 
+    use crate::events::aws::DiffMessages;
     use crate::events::aws::collecter::tests::mock_s3;
     use crate::events::aws::inventory::Manifest;
     use crate::events::aws::tests::EXPECTED_E_TAG;

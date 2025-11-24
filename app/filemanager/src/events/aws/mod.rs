@@ -7,11 +7,13 @@ use chrono::{DateTime, Utc};
 use itertools::{Itertools, izip};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use std::hash::{Hash, Hasher};
 use uuid::Uuid;
 
 use message::EventMessage;
 
 use crate::database::entities::sea_orm_active_enums::{ArchiveStatus, Reason};
+use crate::database::entities::{s3_object, sea_orm_active_enums};
 use crate::events::aws::EventType::{Created, Deleted, Other};
 use crate::events::aws::message::{EventType, default_version_id};
 use crate::uuid::UuidGenerator;
@@ -68,6 +70,23 @@ impl StorageClass {
             AwsStorageClass::Standard => Some(Self::Standard),
             AwsStorageClass::StandardIa => Some(Self::StandardIa),
             _ => None,
+        }
+    }
+
+    /// Convert from the database representation of the storage class to the filemanager storage
+    /// class.
+    pub fn from_database(storage_class: sea_orm_active_enums::StorageClass) -> Self {
+        match storage_class {
+            sea_orm_active_enums::StorageClass::DeepArchive => Self::DeepArchive,
+            sea_orm_active_enums::StorageClass::Glacier => Self::Glacier,
+            sea_orm_active_enums::StorageClass::GlacierIr => Self::GlacierIr,
+            sea_orm_active_enums::StorageClass::IntelligentTiering => Self::IntelligentTiering,
+            sea_orm_active_enums::StorageClass::OnezoneIa => Self::OnezoneIa,
+            sea_orm_active_enums::StorageClass::Outposts => Self::Outposts,
+            sea_orm_active_enums::StorageClass::ReducedRedundancy => Self::ReducedRedundancy,
+            sea_orm_active_enums::StorageClass::Snow => Self::Snow,
+            sea_orm_active_enums::StorageClass::Standard => Self::Standard,
+            sea_orm_active_enums::StorageClass::StandardIa => Self::StandardIa,
         }
     }
 }
@@ -734,9 +753,79 @@ impl FlatS3EventMessage {
     }
 }
 
+impl From<s3_object::Model> for FlatS3EventMessage {
+    fn from(record: s3_object::Model) -> Self {
+        FlatS3EventMessage {
+            s3_object_id: record.s3_object_id,
+            sequencer: record.sequencer,
+            bucket: record.bucket,
+            key: record.key,
+            version_id: record.version_id,
+            size: record.size,
+            e_tag: record.e_tag,
+            sha256: record.sha256,
+            storage_class: record.storage_class.map(StorageClass::from_database),
+            last_modified_date: record.last_modified_date.map(DateTime::from),
+            event_time: record.event_time.map(DateTime::from),
+            event_type: record.event_type.into(),
+            is_delete_marker: record.is_delete_marker,
+            reason: record.reason,
+            archive_status: record.archive_status,
+            ingest_id: record.ingest_id,
+            is_current_state: record.is_current_state,
+            attributes: record.attributes,
+            number_duplicate_events: record.number_duplicate_events,
+            number_reordered: record.number_reordered,
+        }
+    }
+}
+
+impl From<sea_orm_active_enums::EventType> for EventType {
+    fn from(event_type: sea_orm_active_enums::EventType) -> Self {
+        match event_type {
+            sea_orm_active_enums::EventType::Created => Created,
+            sea_orm_active_enums::EventType::Deleted => Deleted,
+            sea_orm_active_enums::EventType::Other => Other,
+        }
+    }
+}
+
 impl From<Vec<FlatS3EventMessages>> for FlatS3EventMessages {
     fn from(messages: Vec<FlatS3EventMessages>) -> Self {
         FlatS3EventMessages(messages.into_iter().flat_map(|message| message.0).collect())
+    }
+}
+
+/// A wrapper around event messages to allow for calculating a diff compared to the database
+/// state. Checks for equality using the bucket, key and version_id.
+#[derive(Debug, Eq, Clone)]
+pub struct DiffMessages(FlatS3EventMessage);
+
+impl Hash for DiffMessages {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.bucket.hash(state);
+        self.0.key.hash(state);
+        self.0.version_id.hash(state);
+    }
+}
+
+impl PartialEq for DiffMessages {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.bucket == other.0.bucket
+            && self.0.key == other.0.key
+            && self.0.version_id == other.0.version_id
+    }
+}
+
+impl From<FlatS3EventMessages> for Vec<DiffMessages> {
+    fn from(value: FlatS3EventMessages) -> Self {
+        value.0.into_iter().map(DiffMessages).collect()
+    }
+}
+
+impl From<Vec<DiffMessages>> for FlatS3EventMessages {
+    fn from(value: Vec<DiffMessages>) -> Self {
+        Self(value.into_iter().map(|diff| diff.0).collect())
     }
 }
 

@@ -10,11 +10,13 @@ use crate::env::Config;
 use crate::error::Error::{S3Error, SQSError, SerdeError};
 use crate::error::{Error, Result};
 use crate::events::aws::{
-    EventType, FlatS3EventMessage, FlatS3EventMessages, StorageClass, TransposedS3EventMessages,
+    DiffMessages, EventType, FlatS3EventMessage, FlatS3EventMessages, StorageClass,
+    TransposedS3EventMessages,
 };
 use crate::events::{Collect, EventSource, EventSourceType};
 use crate::queries::list::ListQueryBuilder;
 use crate::routes::filter::S3ObjectsFilter;
+use crate::routes::filter::wildcard::Wildcard;
 use crate::uuid::UuidGenerator;
 use async_trait::async_trait;
 use aws_sdk_s3::error::{BuildError, ProvideErrorMetadata};
@@ -26,6 +28,8 @@ use aws_sdk_s3::types::{Tag, Tagging};
 use chrono::{DateTime, Utc};
 use futures::TryFutureExt;
 use futures::future::join_all;
+use itertools::Itertools;
+use std::collections::HashSet;
 use std::error;
 use std::str::FromStr;
 use tracing::{trace, warn};
@@ -37,6 +41,8 @@ pub struct CollecterBuilder {
     s3_client: Option<S3Client>,
     sqs_client: Option<SQSClient>,
     sqs_url: Option<String>,
+    crawl_bucket: Option<String>,
+    crawl_prefix: Option<String>,
 }
 
 impl CollecterBuilder {
@@ -57,6 +63,18 @@ impl CollecterBuilder {
         self.set_sqs_url(Some(url))
     }
 
+    /// Set the crawl bucket for crawl-based ingestion.
+    pub fn with_crawl_bucket(mut self, bucket: impl Into<String>) -> Self {
+        self.crawl_bucket = Some(bucket.into());
+        self
+    }
+
+    /// Set the crawl prefix for crawl-based ingestion.
+    pub fn with_crawl_prefix(mut self, prefix: impl Into<String>) -> Self {
+        self.crawl_prefix = Some(prefix.into());
+        self
+    }
+
     /// Set the SQS url to build with.
     pub fn set_sqs_url(mut self, url: Option<impl Into<String>>) -> Self {
         self.sqs_url = url.map(|url| url.into());
@@ -71,9 +89,23 @@ impl CollecterBuilder {
         client: &'a database::Client,
     ) -> Collecter<'a> {
         if let Some(s3_client) = self.s3_client {
-            Collecter::new(s3_client, client, raw_events, config)
+            Collecter::new(
+                s3_client,
+                client,
+                raw_events,
+                config,
+                self.crawl_bucket,
+                self.crawl_prefix,
+            )
         } else {
-            Collecter::new(S3Client::with_defaults().await, client, raw_events, config)
+            Collecter::new(
+                S3Client::with_defaults().await,
+                client,
+                raw_events,
+                config,
+                self.crawl_bucket,
+                self.crawl_prefix,
+            )
         }
     }
 
@@ -145,6 +177,8 @@ pub struct Collecter<'a> {
     raw_events: FlatS3EventMessages,
     config: &'a Config,
     n_records: Option<usize>,
+    crawl_bucket: Option<String>,
+    crawl_prefix: Option<String>,
 }
 
 impl<'a> Collecter<'a> {
@@ -154,6 +188,8 @@ impl<'a> Collecter<'a> {
         database_client: &'a database::Client,
         raw_events: FlatS3EventMessages,
         config: &'a Config,
+        crawl_bucket: Option<String>,
+        crawl_prefix: Option<String>,
     ) -> Self {
         Self {
             client,
@@ -161,6 +197,8 @@ impl<'a> Collecter<'a> {
             raw_events,
             config,
             n_records: None,
+            crawl_bucket,
+            crawl_prefix,
         }
     }
 
@@ -172,18 +210,32 @@ impl<'a> Collecter<'a> {
         &'a database::Client,
         FlatS3EventMessages,
         &'a Config,
+        Option<String>,
+        Option<String>,
     ) {
         (
             self.client,
             self.database_client,
             self.raw_events,
             self.config,
+            self.crawl_bucket,
+            self.crawl_prefix,
         )
     }
 
     /// Set the S3 client.
     pub fn set_client(&mut self, client: S3Client) {
         self.client = client;
+    }
+
+    /// Set the crawl bucket.
+    pub fn set_crawl_bucket(&mut self, bucket: String) {
+        self.crawl_bucket = Some(bucket);
+    }
+
+    /// Set the crawl prefix.
+    pub fn set_crawl_prefix(&mut self, prefix: String) {
+        self.crawl_prefix = Some(prefix);
     }
 
     /// Get the S3 client.
@@ -374,14 +426,69 @@ impl<'a> Collecter<'a> {
         }
     }
 
+    /// Updates events that are crawls to take into account the existing database state.
+    pub async fn update_crawl_events(
+        database_client: &database::Client,
+        events: FlatS3EventMessages,
+        crawl_bucket: String,
+        crawl_prefix: String,
+    ) -> Result<FlatS3EventMessages> {
+        // Get crawl list object details ensuring that the current database state is taken into account.
+        let database_state: Vec<FlatS3EventMessage> =
+            ListQueryBuilder::<_, s3_object::Entity>::new(database_client.connection_ref())
+                .filter_all(
+                    S3ObjectsFilter {
+                        bucket: Wildcard::new(crawl_bucket).into(),
+                        key: Wildcard::new(format!("{}{}", crawl_prefix.clone(), "*")).into(),
+                        ..Default::default()
+                    },
+                    true,
+                    true,
+                )?
+                .all()
+                .await?
+                .into_iter()
+                .map(FlatS3EventMessage::from)
+                .collect();
+
+        // The symmetric difference keeps the records that need to be deleted from the database.
+        let s3_state: HashSet<DiffMessages> = HashSet::from_iter(Vec::<DiffMessages>::from(events));
+        let database_state: HashSet<DiffMessages> = HashSet::from_iter(Vec::<DiffMessages>::from(
+            FlatS3EventMessages(database_state),
+        ));
+
+        // The symmetric difference keeps the records that need to be deleted from the database.
+        // First work out the difference between crawl and the database state, which represents new
+        // records to be ingested or updated.
+        let diff_created = s3_state.difference(&database_state).cloned().collect_vec();
+        // All records that are not in the inventory, but are in the database represent records that
+        // should be deleted from the database. This is represented by the difference between the
+        // database state and the crawl state.
+        let diff_deleted = database_state
+            .difference(&s3_state)
+            .cloned()
+            .map(|mut record| {
+                // Update these to deleted events, as these should be removed from the database.
+                record.0.is_current_state = false;
+                record.0.event_type = EventType::Deleted;
+                record
+            })
+            .collect_vec();
+        let diff = [diff_created, diff_deleted].concat();
+
+        Ok(FlatS3EventMessages::from(diff))
+    }
+
     /// Process events and add header and datetime fields.
     pub async fn update_events(
         config: &Config,
         client: &S3Client,
         database_client: &database::Client,
         events: FlatS3EventMessages,
+        crawl_bucket: Option<String>,
+        crawl_prefix: Option<String>,
     ) -> Result<FlatS3EventMessages> {
-        Ok(FlatS3EventMessages(
+        let events = FlatS3EventMessages(
             join_all(events.into_inner().into_iter().map(|event| async move {
                 // No need to run this unnecessarily on removed events.
                 match event.event_type {
@@ -397,7 +504,13 @@ impl<'a> Collecter<'a> {
             .await
             .into_iter()
             .collect::<Result<Vec<FlatS3EventMessage>>>()?,
-        ))
+        );
+
+        if let (Some(crawl_bucket), Some(crawl_prefix)) = (crawl_bucket, crawl_prefix) {
+            Self::update_crawl_events(database_client, events, crawl_bucket, crawl_prefix).await
+        } else {
+            Ok(events)
+        }
     }
 
     /// Get the number of records processed.
@@ -415,11 +528,20 @@ impl From<BuildError> for Error {
 #[async_trait]
 impl Collect for Collecter<'_> {
     async fn collect(mut self) -> Result<EventSource> {
-        let (client, database_client, events, config) = self.into_inner();
+        let (client, database_client, events, config, crawl_bucket, crawl_prefix) =
+            self.into_inner();
 
         let events = events.sort_and_dedup();
 
-        let events = Self::update_events(config, &client, database_client, events).await?;
+        let events = Self::update_events(
+            config,
+            &client,
+            database_client,
+            events,
+            crawl_bucket,
+            crawl_prefix,
+        )
+        .await?;
         // Get only the known event types.
         let events = events.filter_known();
         let n_records = events.0.len();
@@ -581,11 +703,12 @@ pub(crate) mod tests {
 
         collecter.client = s3_client_expectations();
 
-        let mut result = Collecter::update_events(&config, &collecter.client, &client, events)
-            .await
-            .unwrap()
-            .into_inner()
-            .into_iter();
+        let mut result =
+            Collecter::update_events(&config, &collecter.client, &client, events, None, None)
+                .await
+                .unwrap()
+                .into_inner()
+                .into_iter();
 
         let first = result.next().unwrap();
         assert_eq!(first.storage_class, Some(IntelligentTiering));
@@ -897,6 +1020,8 @@ pub(crate) mod tests {
             database_client,
             expected_flat_events_simple(),
             config,
+            None,
+            None,
         )
     }
 

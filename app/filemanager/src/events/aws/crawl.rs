@@ -5,34 +5,26 @@ use crate::clients::aws::s3::Client;
 use crate::database::entities::sea_orm_active_enums::Reason;
 use crate::error::Result;
 use crate::events::aws::message::{EventType, default_version_id, quote_e_tag};
-use std::collections::HashSet;
-
-use crate::database::entities::s3_object;
-use crate::events::aws::{DiffMessages, FlatS3EventMessage, FlatS3EventMessages};
+use crate::events::aws::{FlatS3EventMessage, FlatS3EventMessages};
 use crate::uuid::UuidGenerator;
 use aws_sdk_s3::types::ObjectVersion;
 use chrono::Utc;
-use itertools::Itertools;
 
 /// Represents crawl operations.
 #[derive(Debug)]
 pub struct Crawl {
     client: Client,
-    database_state: Vec<s3_object::Model>,
 }
 
 impl Crawl {
     /// Create a new crawl.
-    pub fn new(client: Client, database_state: Vec<s3_object::Model>) -> Self {
-        Self {
-            client,
-            database_state,
-        }
+    pub fn new(client: Client) -> Self {
+        Self { client }
     }
 
     /// Create a new crawl with a default s3 client.
-    pub async fn with_defaults(database_state: Vec<s3_object::Model>) -> Self {
-        Self::new(Client::with_defaults().await, database_state)
+    pub async fn with_defaults() -> Self {
+        Self::new(Client::with_defaults().await)
     }
 
     /// Crawl S3 and produce the event messages that should be ingested.
@@ -45,34 +37,13 @@ impl Crawl {
         let versions = list.versions.unwrap_or_default();
 
         // We only want to crawl current objects.
-        let messages = versions
+        let messages: Vec<FlatS3EventMessage> = versions
             .into_iter()
             .filter(|object| object.is_latest.is_some_and(|latest| latest))
             .map(|object| FlatS3EventMessage::from(object).with_bucket(bucket.to_string()))
             .collect();
-        let mut database_state: Vec<FlatS3EventMessage> = self
-            .database_state
-            .into_iter()
-            .map(FlatS3EventMessage::from)
-            .collect();
 
-        // Take the difference between what is on S3, and the current database state. All records
-        // that are not on S3, but are in the database represent records that should be deleted from
-        // the database.
-        database_state
-            .iter_mut()
-            .for_each(|record| record.event_type = EventType::Deleted);
-
-        // The symmetric difference keeps the records that need to be deleted from the database.
-        let s3_state: HashSet<DiffMessages> =
-            HashSet::from_iter(Vec::<DiffMessages>::from(FlatS3EventMessages(messages)));
-        let database_state: HashSet<DiffMessages> = HashSet::from_iter(Vec::<DiffMessages>::from(
-            FlatS3EventMessages(database_state),
-        ));
-        let diff = s3_state.symmetric_difference(&database_state);
-
-        // Crawl the objects that are required by the diff.
-        Ok(FlatS3EventMessages::from(diff.cloned().collect_vec()))
+        Ok(FlatS3EventMessages(messages))
     }
 }
 
@@ -160,8 +131,10 @@ pub(crate) mod tests {
         let config = Config::default();
         let mut collecter = test_collecter(&config, &client).await;
         collecter.set_client(crawl_expectations());
+        collecter.set_crawl_bucket("bucket".to_string());
+        collecter.set_crawl_prefix("prefix".to_string());
 
-        let result = Crawl::new(collecter.client().clone(), vec![])
+        let result = Crawl::new(collecter.client().clone())
             .crawl_s3("bucket", Some("prefix".to_string()))
             .await
             .unwrap()

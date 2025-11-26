@@ -533,16 +533,12 @@ impl From<Record> for FlatS3EventMessage {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use std::collections::HashSet;
-
-    use crate::events::aws::DiffMessages;
     use crate::events::aws::collecter::tests::mock_s3;
     use crate::events::aws::inventory::Manifest;
     use crate::events::aws::tests::EXPECTED_E_TAG;
     use aws_sdk_s3::operation::get_object::GetObjectOutput;
     use aws_sdk_s3::primitives::ByteStream;
     use aws_smithy_mocks::{Rule, mock};
-    use chrono::Days;
     use flate2::read::GzEncoder;
     use serde_json::Value;
     use serde_json::json;
@@ -564,60 +560,6 @@ pub(crate) mod tests {
     pub(crate) const EXPECTED_LAST_MODIFIED_ONE: &str = "2024-04-22T01:11:06.000Z";
     pub(crate) const EXPECTED_LAST_MODIFIED_TWO: &str = "2024-04-22T01:13:28.000Z";
     pub(crate) const EXPECTED_LAST_MODIFIED_THREE: &str = "2024-04-22T01:14:53.000Z";
-
-    #[test]
-    fn diff_messages() {
-        let database_records = vec![
-            FlatS3EventMessage {
-                bucket: "bucket".to_string(),
-                key: "key".to_string(),
-                version_id: "version".to_string(),
-                // Other fields shouldn't affect this.
-                last_modified_date: Some(DateTime::default()),
-                ..Default::default()
-            },
-            FlatS3EventMessage {
-                bucket: "bucket".to_string(),
-                key: "key1".to_string(),
-                version_id: "version".to_string(),
-                ..Default::default()
-            },
-        ];
-        let inventory_records = vec![
-            FlatS3EventMessage {
-                bucket: "bucket".to_string(),
-                key: "key".to_string(),
-                version_id: "version".to_string(),
-                last_modified_date: Some(
-                    DateTime::default().checked_add_days(Days::new(1)).unwrap(),
-                ),
-                ..Default::default()
-            },
-            FlatS3EventMessage {
-                bucket: "bucket".to_string(),
-                key: "key2".to_string(),
-                version_id: "version".to_string(),
-                ..Default::default()
-            },
-        ];
-
-        let inventory_records: HashSet<DiffMessages> = HashSet::from_iter(
-            Vec::<DiffMessages>::from(FlatS3EventMessages(inventory_records)),
-        );
-        let database_records: HashSet<DiffMessages> = HashSet::from_iter(
-            Vec::<DiffMessages>::from(FlatS3EventMessages(database_records)),
-        );
-
-        let diff = &inventory_records - &database_records;
-        let expected = HashSet::from_iter(vec![DiffMessages(FlatS3EventMessage {
-            bucket: "bucket".to_string(),
-            key: "key2".to_string(),
-            version_id: "version".to_string(),
-            ..Default::default()
-        })]);
-
-        assert_eq!(diff, expected);
-    }
 
     #[tokio::test]
     async fn parse_csv_manifest_from_checksum() {

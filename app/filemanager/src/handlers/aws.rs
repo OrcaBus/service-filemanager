@@ -129,19 +129,7 @@ pub async fn ingest_s3_inventory(
     tx.commit().await?;
 
     // Get only the current created state of records.
-    let database_records = FlatS3EventMessages(
-        database_records
-            .0
-            .into_iter()
-            .map(|mut record| {
-                // Take the difference between what is in the inventory, and the current database state.
-                // All records that are not in the inventory, but are in the database represent records that
-                // should be deleted from the database.
-                record.event_type = EventType::Deleted;
-                record
-            })
-            .collect(),
-    );
+    let database_records = FlatS3EventMessages(database_records.0.into_iter().collect());
 
     // Some back and forth between transposed vs not transposed events. Potential optimization
     // could involve using ndarray + slicing, with an enum representing the fields of the struct.
@@ -151,11 +139,23 @@ pub async fn ingest_s3_inventory(
     let database_records: HashSet<DiffMessages> =
         HashSet::from_iter(Vec::<DiffMessages>::from(database_records));
 
-    // The symmetric difference keeps the records that need to be deleted from the database.
-    let diff = transposed_events
-        .symmetric_difference(&database_records)
+    // The difference keeps the records that need to be crawled
+    let diff_created = transposed_events
+        .difference(&database_records)
         .cloned()
         .collect_vec();
+    // All records that are not in the inventory, but are in the database represent records that
+    // should be deleted from the database.
+    let diff_deleted = database_records
+        .difference(&transposed_events)
+        .cloned()
+        .map(|mut record| {
+            record.0.event_type = EventType::Deleted;
+            record.0.is_current_state = false;
+            record
+        })
+        .collect_vec();
+    let diff = [diff_created, diff_deleted].concat();
 
     if diff.is_empty() {
         debug!("no diff found between database and inventory");

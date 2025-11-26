@@ -2,10 +2,10 @@
 //!
 
 use crate::database::Ingest;
+use crate::database::entities::s3_crawl;
 use crate::database::entities::s3_crawl::Model as Crawl;
 use crate::database::entities::sea_orm_active_enums::CrawlStatus;
 use crate::database::entities::sea_orm_active_enums::CrawlStatus::InProgress;
-use crate::database::entities::{s3_crawl, s3_object};
 use crate::error::Error::{CrawlError, ExpectedSomeValue};
 use crate::error::{Error, Result};
 use crate::events::Collect;
@@ -178,39 +178,24 @@ pub async fn crawl_sync_s3(
     };
 
     // Get crawl list object details ensuring that the current database state is taken into account.
-    let database_state = ListQueryBuilder::<_, s3_object::Entity>::new(&conn)
-        .filter_all(
-            S3ObjectsFilter {
-                bucket: Wildcard::new(crawl.bucket.to_string()).into(),
-                key: Wildcard::new(format!(
-                    "{}{}",
-                    crawl.prefix.clone().unwrap_or_default(),
-                    "*"
-                ))
-                .into(),
-                ..Default::default()
-            },
-            true,
-            true,
-        )?
-        .all()
-        .await?;
-    let crawl = crawl::Crawl::new(state.s3_client().clone(), database_state)
-        .crawl_s3(&crawl.bucket, crawl.prefix)
+    let crawl_result = crawl::Crawl::new(state.s3_client().clone())
+        .crawl_s3(&crawl.bucket, crawl.prefix.clone())
         .await;
 
-    if let Err(err) = crawl {
+    if let Err(err) = crawl_result {
         set_failed(crawl_execution).await?;
         return Err(err);
     }
 
-    let crawl = crawl?;
-    let n_events = i64::try_from(crawl.0.len())?;
+    let crawl_result = crawl_result?;
+    let n_events = i64::try_from(crawl_result.0.len())?;
 
     // Update events.
     let events = CollecterBuilder::default()
+        .with_crawl_bucket(crawl.bucket)
+        .with_crawl_prefix(crawl.prefix.unwrap_or_default())
         .with_s3_client(state.s3_client().clone())
-        .build(crawl, state.config(), state.database_client())
+        .build(crawl_result, state.config(), state.database_client())
         .await
         .collect()
         .await;

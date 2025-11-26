@@ -34,6 +34,7 @@ pub mod message;
     PartialOrd,
     Ord,
     Clone,
+    Hash,
     sqlx::Type,
     Serialize,
     Deserialize,
@@ -799,21 +800,55 @@ impl From<Vec<FlatS3EventMessages>> for FlatS3EventMessages {
 /// A wrapper around event messages to allow for calculating a diff compared to the database
 /// state. Checks for equality using the bucket, key and version_id.
 #[derive(Debug, Eq, Clone)]
-pub struct DiffMessages(FlatS3EventMessage);
+pub struct DiffMessages(pub FlatS3EventMessage);
 
 impl Hash for DiffMessages {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.bucket.hash(state);
         self.0.key.hash(state);
         self.0.version_id.hash(state);
+        self.0.size.hash(state);
+        self.0.e_tag.hash(state);
+        self.0.sha256.hash(state);
+        self.0.storage_class.hash(state);
+        self.0.last_modified_date.hash(state);
+        self.0.event_type.hash(state);
+        self.0.is_delete_marker.hash(state);
+        self.0.reason.hash(state);
+        self.0.archive_status.hash(state);
+        self.0.ingest_id.hash(state);
+        self.0.is_current_state.hash(state);
+        self.0.attributes.hash(state);
     }
 }
 
 impl PartialEq for DiffMessages {
     fn eq(&self, other: &Self) -> bool {
+        // Only values that are updatable should be considered equal for crawl
+        // purposes.
         self.0.bucket == other.0.bucket
             && self.0.key == other.0.key
             && self.0.version_id == other.0.version_id
+            && self.0.size == other.0.size
+            && self.0.e_tag == other.0.e_tag
+            && self.0.sha256 == other.0.sha256
+            && self.0.storage_class == other.0.storage_class
+            && self.0.last_modified_date == other.0.last_modified_date
+            && self.0.event_type == other.0.event_type
+            && self.0.is_delete_marker == other.0.is_delete_marker
+            && self.0.reason == other.0.reason
+            && self.0.archive_status == other.0.archive_status
+            && self.0.ingest_id == other.0.ingest_id
+            && self.0.is_current_state == other.0.is_current_state
+            && self.0.attributes == other.0.attributes
+
+        // Other values cannot be updated for crawls, or are always the same value, so they
+        // do not need to be considered.
+        // pub s3_object_id: Uuid,
+        // pub sequencer: Option<String>,
+        // pub event_time: Option<DateTime<Utc>>,
+        // pub number_duplicate_events: i64,
+        // pub number_reordered: i64,
     }
 }
 
@@ -834,9 +869,10 @@ pub(crate) mod tests {
     use crate::database::entities::sea_orm_active_enums::Reason;
     use crate::events::aws::message::{Message, Record};
     use crate::events::aws::{
-        EventType, FlatS3EventMessage, FlatS3EventMessages, TransposedS3EventMessages,
+        DiffMessages, EventType, FlatS3EventMessage, FlatS3EventMessages, TransposedS3EventMessages,
     };
     use serde_json::{Value, json};
+    use std::collections::HashSet;
 
     pub(crate) const EXPECTED_SEQUENCER_CREATED_ZERO: &str = "0055AED6DCD90281E3"; // pragma: allowlist secret
     pub(crate) const EXPECTED_SEQUENCER_CREATED_ONE: &str = "0055AED6DCD90281E4"; // pragma: allowlist secret
@@ -851,6 +887,58 @@ pub(crate) mod tests {
     pub(crate) const EXPECTED_VERSION_ID: &str = "096fKKXTRTtl3on89fVO.nfljtsv6qko";
     pub(crate) const EXPECTED_SHA256: &str = "Y0sCextp4SQtQNU+MSs7SsdxD1W+gfKJtUlEbvZ3i+4="; // pragma: allowlist secret
     pub(crate) const EXPECTED_REQUEST_ID: &str = "C3D13FE58DE4C810"; // pragma: allowlist secret
+
+    #[test]
+    fn diff_messages() {
+        let database_records = vec![
+            FlatS3EventMessage {
+                bucket: "bucket".to_string(),
+                key: "key".to_string(),
+                version_id: "version".to_string(),
+                // Other fields shouldn't affect this.
+                sequencer: Some("123".to_string()),
+                ..Default::default()
+            },
+            FlatS3EventMessage {
+                bucket: "bucket".to_string(),
+                key: "key1".to_string(),
+                version_id: "version".to_string(),
+                ..Default::default()
+            },
+        ];
+        let inventory_records = vec![
+            FlatS3EventMessage {
+                bucket: "bucket".to_string(),
+                key: "key".to_string(),
+                version_id: "version".to_string(),
+                sequencer: Some("123".to_string()),
+                ..Default::default()
+            },
+            FlatS3EventMessage {
+                bucket: "bucket".to_string(),
+                key: "key2".to_string(),
+                version_id: "version".to_string(),
+                ..Default::default()
+            },
+        ];
+
+        let inventory_records: HashSet<DiffMessages> = HashSet::from_iter(
+            Vec::<DiffMessages>::from(FlatS3EventMessages(inventory_records)),
+        );
+        let database_records: HashSet<DiffMessages> = HashSet::from_iter(
+            Vec::<DiffMessages>::from(FlatS3EventMessages(database_records)),
+        );
+
+        let diff = &inventory_records - &database_records;
+        let expected = HashSet::from_iter(vec![DiffMessages(FlatS3EventMessage {
+            bucket: "bucket".to_string(),
+            key: "key2".to_string(),
+            version_id: "version".to_string(),
+            ..Default::default()
+        })]);
+
+        assert_eq!(diff, expected);
+    }
 
     #[test]
     fn test_flat_events() {

@@ -193,7 +193,7 @@ pub async fn crawl_sync_s3(
     // Update events.
     let events = CollecterBuilder::default()
         .with_crawl_bucket(crawl.bucket)
-        .with_crawl_prefix(crawl.prefix.unwrap_or_default())
+        .with_crawl_prefix(crawl.prefix)
         .with_s3_client(state.s3_client().clone())
         .build(crawl_result, state.config(), state.database_client())
         .await
@@ -389,7 +389,7 @@ pub(crate) mod tests {
             state.clone(),
             "/s3/crawl/sync",
             Method::POST,
-            Body::from(json!({"bucket": "bucket", "prefix": "prefix"}).to_string()),
+            Body::from(json!({"bucket": "bucket"}).to_string()),
         )
         .await
         .1;
@@ -480,7 +480,7 @@ pub(crate) mod tests {
             get_tagging_expectation(
                 "key".to_string(),
                 default_version_id().to_string(),
-                expected_get_object_tagging(),
+                expected_get_object_tagging(Some(Uuid::default())),
             ),
             head_expectation(
                 "key1".to_string(),
@@ -495,7 +495,7 @@ pub(crate) mod tests {
             get_tagging_expectation(
                 "key1".to_string(),
                 default_version_id().to_string(),
-                expected_get_object_tagging(),
+                expected_get_object_tagging(Some(Uuid::default())),
             ),
         ])
     }

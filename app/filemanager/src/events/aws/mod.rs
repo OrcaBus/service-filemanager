@@ -807,48 +807,14 @@ impl Hash for DiffMessages {
         self.0.bucket.hash(state);
         self.0.key.hash(state);
         self.0.version_id.hash(state);
-        self.0.size.hash(state);
-        self.0.e_tag.hash(state);
-        self.0.sha256.hash(state);
-        self.0.storage_class.hash(state);
-        self.0.last_modified_date.hash(state);
-        self.0.event_type.hash(state);
-        self.0.is_delete_marker.hash(state);
-        self.0.reason.hash(state);
-        self.0.archive_status.hash(state);
-        self.0.ingest_id.hash(state);
-        self.0.is_current_state.hash(state);
-        self.0.attributes.hash(state);
     }
 }
 
 impl PartialEq for DiffMessages {
     fn eq(&self, other: &Self) -> bool {
-        // Only values that are updatable should be considered equal for crawl
-        // purposes.
         self.0.bucket == other.0.bucket
             && self.0.key == other.0.key
             && self.0.version_id == other.0.version_id
-            && self.0.size == other.0.size
-            && self.0.e_tag == other.0.e_tag
-            && self.0.sha256 == other.0.sha256
-            && self.0.storage_class == other.0.storage_class
-            && self.0.last_modified_date == other.0.last_modified_date
-            && self.0.event_type == other.0.event_type
-            && self.0.is_delete_marker == other.0.is_delete_marker
-            && self.0.reason == other.0.reason
-            && self.0.archive_status == other.0.archive_status
-            && self.0.ingest_id == other.0.ingest_id
-            && self.0.is_current_state == other.0.is_current_state
-            && self.0.attributes == other.0.attributes
-
-        // Other values cannot be updated for crawls, or are always the same value, so they
-        // do not need to be considered.
-        // pub s3_object_id: Uuid,
-        // pub sequencer: Option<String>,
-        // pub event_time: Option<DateTime<Utc>>,
-        // pub number_duplicate_events: i64,
-        // pub number_reordered: i64,
     }
 }
 

@@ -70,8 +70,8 @@ impl CollecterBuilder {
     }
 
     /// Set the crawl prefix for crawl-based ingestion.
-    pub fn with_crawl_prefix(mut self, prefix: impl Into<String>) -> Self {
-        self.crawl_prefix = Some(prefix.into());
+    pub fn with_crawl_prefix(mut self, prefix: Option<String>) -> Self {
+        self.crawl_prefix = prefix;
         self
     }
 
@@ -234,8 +234,8 @@ impl<'a> Collecter<'a> {
     }
 
     /// Set the crawl prefix.
-    pub fn set_crawl_prefix(&mut self, prefix: String) {
-        self.crawl_prefix = Some(prefix);
+    pub fn set_crawl_prefix(&mut self, prefix: Option<String>) {
+        self.crawl_prefix = prefix;
     }
 
     /// Get the S3 client.
@@ -431,7 +431,7 @@ impl<'a> Collecter<'a> {
         database_client: &database::Client,
         events: FlatS3EventMessages,
         crawl_bucket: String,
-        crawl_prefix: String,
+        crawl_prefix: Option<String>,
     ) -> Result<FlatS3EventMessages> {
         // Get crawl list object details ensuring that the current database state is taken into account.
         let database_state: Vec<FlatS3EventMessage> =
@@ -439,7 +439,12 @@ impl<'a> Collecter<'a> {
                 .filter_all(
                     S3ObjectsFilter {
                         bucket: Wildcard::new(crawl_bucket).into(),
-                        key: Wildcard::new(format!("{}{}", crawl_prefix.clone(), "*")).into(),
+                        key: Wildcard::new(format!(
+                            "{}{}",
+                            crawl_prefix.unwrap_or_default().clone(),
+                            "*"
+                        ))
+                        .into(),
                         ..Default::default()
                     },
                     true,
@@ -451,17 +456,15 @@ impl<'a> Collecter<'a> {
                 .map(FlatS3EventMessage::from)
                 .collect();
 
-        // The symmetric difference keeps the records that need to be deleted from the database.
+        // The difference keeps the records that need to be deleted from the database.
+        // All new crawl events should be appended to the database, this could have efficiency
+        // improved to ignore updates where the crawl event is exactly the same as the database state
         let s3_state: HashSet<DiffMessages> = HashSet::from_iter(Vec::<DiffMessages>::from(events));
         let database_state: HashSet<DiffMessages> = HashSet::from_iter(Vec::<DiffMessages>::from(
             FlatS3EventMessages(database_state),
         ));
 
-        // The symmetric difference keeps the records that need to be deleted from the database.
-        // First work out the difference between crawl and the database state, which represents new
-        // records to be ingested or updated.
-        let diff_created = s3_state.difference(&database_state).cloned().collect_vec();
-        // All records that are not in the inventory, but are in the database represent records that
+        // All records that are not in the crawl, but are in the database represent records that
         // should be deleted from the database. This is represented by the difference between the
         // database state and the crawl state.
         let diff_deleted = database_state
@@ -474,7 +477,7 @@ impl<'a> Collecter<'a> {
                 record
             })
             .collect_vec();
-        let diff = [diff_created, diff_deleted].concat();
+        let diff = [s3_state.into_iter().collect_vec(), diff_deleted].concat();
 
         Ok(FlatS3EventMessages::from(diff))
     }
@@ -506,7 +509,7 @@ impl<'a> Collecter<'a> {
             .collect::<Result<Vec<FlatS3EventMessage>>>()?,
         );
 
-        if let (Some(crawl_bucket), Some(crawl_prefix)) = (crawl_bucket, crawl_prefix) {
+        if let Some(crawl_bucket) = crawl_bucket {
             Self::update_crawl_events(database_client, events, crawl_bucket, crawl_prefix).await
         } else {
             Ok(events)
@@ -579,6 +582,7 @@ pub(crate) mod tests {
 
     use aws_sdk_s3::primitives::DateTimeFormat;
     use aws_sdk_s3::types;
+    use aws_sdk_s3::types::builders::TagBuilder;
     use aws_sdk_s3::types::error::NotFound;
     use aws_sdk_sqs::operation::receive_message::ReceiveMessageOutput;
     use aws_sdk_sqs::types::builders::MessageBuilder;
@@ -972,9 +976,21 @@ pub(crate) mod tests {
             .build()
     }
 
-    pub(crate) fn expected_get_object_tagging() -> GetObjectTaggingOutput {
+    pub(crate) fn expected_get_object_tagging(ingest_id: Option<Uuid>) -> GetObjectTaggingOutput {
         GetObjectTaggingOutput::builder()
-            .set_tag_set(Some(vec![]))
+            .set_tag_set(Some(
+                ingest_id
+                    .map(|id| {
+                        vec![
+                            TagBuilder::default()
+                                .key("ingest_id")
+                                .value(id.to_string())
+                                .build()
+                                .unwrap(),
+                        ]
+                    })
+                    .unwrap_or_default(),
+            ))
             .build()
             .unwrap()
     }
@@ -998,7 +1014,7 @@ pub(crate) mod tests {
             get_tagging_expectation(
                 "key".to_string(),
                 EXPECTED_VERSION_ID.to_string(),
-                expected_get_object_tagging(),
+                expected_get_object_tagging(None),
             ),
         ])
     }

@@ -132,10 +132,9 @@ pub(crate) mod tests {
         let mut collecter = test_collecter(&config, &client).await;
         collecter.set_client(crawl_expectations());
         collecter.set_crawl_bucket("bucket".to_string());
-        collecter.set_crawl_prefix("prefix".to_string());
 
         let result = Crawl::new(collecter.client().clone())
-            .crawl_s3("bucket", Some("prefix".to_string()))
+            .crawl_s3("bucket", None)
             .await
             .unwrap()
             .into_inner();
@@ -174,6 +173,59 @@ pub(crate) mod tests {
             "bucket",
         );
     }
+
+    // #[sqlx::test(migrator = "MIGRATOR")]
+    // async fn crawl_messages_existing_entry(pool: PgPool) {
+    //     let client = database::Client::from_pool(pool);
+    //
+    //     let event = FlatS3EventMessage::new_with_generated_id()
+    //         .with_key("key".to_string())
+    //         .with_bucket("bucket".to_string())
+    //         .with_sequencer(Some("000000000000000000000000000000".to_string()))
+    //         .with_storage_class(Some(StorageClass::IntelligentTiering))
+    //         .with_ingest_id(Some(Uuid::default()))
+    //         .with_archive_status(Some(ArchiveStatus::DeepArchiveAccess))
+    //         .with_e_tag(Some(EXPECTED_QUOTED_E_TAG.to_string()))
+    //         .with_last_modified_date(Some("1970-01-01 00:00:00.000000 +00:00".parse().unwrap()))
+    //         .with_version_id(default_version_id())
+    //         .with_size(Some(1))
+    //         .with_is_current_state(true)
+    //         .with_sha256(Some(EXPECTED_SHA256.to_string()));
+    //
+    //     client.ingest(EventSourceType::S3(TransposedS3EventMessages::from(
+    //         FlatS3EventMessages(vec![event]),
+    //     ))).await.unwrap();
+    //
+    //     let config = Config::default();
+    //     let mut collecter = test_collecter(&config, &client).await;
+    //     collecter.set_client(crawl_expectations());
+    //     collecter.set_crawl_bucket("bucket".to_string());
+    //
+    //     let result = Crawl::new(collecter.client().clone())
+    //         .crawl_s3("bucket", None)
+    //         .await
+    //         .unwrap()
+    //         .into_inner();
+    //
+    //     collecter.set_raw_events(FlatS3EventMessages(result));
+    //     let result = collecter.collect().await.unwrap();
+    //     client.ingest(result.event_type).await.unwrap();
+    //
+    //     let results = fetch_results_ordered(&client).await;
+    //     assert_eq!(results.len(), 2);
+    //     assert_crawl_record(
+    //         &results[0],
+    //         "000000000000000000000000000000",
+    //         "key",
+    //         "bucket",
+    //     );
+    //     assert_crawl_record(
+    //         &results[1],
+    //         "000000000000000000000000000000-0100000000000000",
+    //         "key1",
+    //         "bucket",
+    //     );
+    // }
 
     #[sqlx::test(migrator = "MIGRATOR")]
     async fn crawl_message_always_latest(pool: PgPool) {
@@ -371,9 +423,7 @@ pub(crate) mod tests {
             RuleMode::MatchAny,
             &[
                 &[mock!(aws_sdk_s3::Client::list_object_versions)
-                    .match_requests(
-                        |req| req.bucket() == Some("bucket") && req.prefix() == Some("prefix")
-                    )
+                    .match_requests(|req| req.bucket() == Some("bucket") && req.prefix().is_none())
                     .then_output(move || {
                         ListObjectVersionsOutput::builder()
                             .versions(

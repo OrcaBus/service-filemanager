@@ -19,7 +19,6 @@ use crate::error::Result;
 use crate::events::aws::collecter::CollecterBuilder;
 use crate::events::aws::inventory::{Inventory, Manifest};
 use crate::events::aws::message::EventType;
-use crate::events::aws::message::EventType::Created;
 use crate::events::aws::{DiffMessages, FlatS3EventMessages, TransposedS3EventMessages};
 use crate::events::{Collect, EventSourceType};
 
@@ -141,7 +140,6 @@ pub async fn ingest_s3_inventory(
                 record.event_type = EventType::Deleted;
                 record
             })
-            .filter(|record| record.event_type == Created)
             .collect(),
     );
 
@@ -231,6 +229,7 @@ pub(crate) mod tests {
         EXPECTED_LAST_MODIFIED_ONE, EXPECTED_LAST_MODIFIED_THREE, EXPECTED_LAST_MODIFIED_TWO,
         EXPECTED_QUOTED_E_TAG_KEY_2, MANIFEST_BUCKET, csv_manifest_from_key_expectations,
     };
+    use crate::events::aws::message::EventType::Created;
     use crate::events::aws::message::EventType::Deleted;
     use crate::events::aws::message::default_version_id;
     use crate::events::aws::tests::{

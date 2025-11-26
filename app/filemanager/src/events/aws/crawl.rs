@@ -126,8 +126,9 @@ pub(crate) mod tests {
     use super::*;
     use crate::database;
     use crate::database::Ingest;
-    use crate::database::aws::ingester::tests::test_ingester;
+    use crate::database::aws::ingester::tests::{fetch_results_ordered, test_ingester};
     use crate::database::aws::migration::tests::MIGRATOR;
+    use crate::env::Config;
     use crate::events::Collect;
     use crate::events::EventSourceType;
     use crate::events::aws::StorageClass;
@@ -135,11 +136,11 @@ pub(crate) mod tests {
     use crate::events::aws::collecter::CollecterBuilder;
     use crate::events::aws::collecter::tests::{
         expected_put_object_tagging, get_tagging_expectation, head_expectation, mock_s3,
-        put_tagging_expectation,
+        put_tagging_expectation, test_collecter,
     };
     use crate::events::aws::message::EventType::{Created, Deleted};
     use crate::events::aws::tests::EXPECTED_QUOTED_E_TAG;
-    use crate::events::aws::tests::assert_flat_without_time;
+    use crate::routes::crawl::tests::crawl_expectations;
     use aws_sdk_s3::operation::get_object_tagging::GetObjectTaggingOutput;
     use aws_sdk_s3::operation::head_object::HeadObjectOutput;
     use aws_sdk_s3::operation::list_object_versions::ListObjectVersionsOutput;
@@ -148,37 +149,56 @@ pub(crate) mod tests {
     use aws_smithy_mocks::{Rule, RuleMode};
     use aws_smithy_mocks::{mock, mock_client};
     use itertools::Itertools;
+    use sqlx::postgres::PgRow;
     use sqlx::{Executor, PgPool, Row};
     use std::str::FromStr;
     use uuid::Uuid;
 
-    #[tokio::test]
-    async fn crawl_messages() {
-        let client = list_object_expectations(&[]);
+    #[sqlx::test(migrator = "MIGRATOR")]
+    async fn crawl_messages(pool: PgPool) {
+        let client = database::Client::from_pool(pool);
+        let config = Config::default();
+        let mut collecter = test_collecter(&config, &client).await;
+        collecter.set_client(crawl_expectations());
 
-        let result = Crawl::new(client, vec![])
+        let result = Crawl::new(collecter.client().clone(), vec![])
             .crawl_s3("bucket", Some("prefix".to_string()))
             .await
             .unwrap()
             .into_inner();
 
-        assert_flat_without_time(
-            result[0].clone(),
+        assert_crawl_event(
+            result.iter().find(|r| r.key == "key").unwrap().clone(),
             &Created,
             None,
             Some(1),
             default_version_id(),
-            false,
-            true,
         );
-        assert_flat_without_time(
-            result[1].clone(),
+        assert_crawl_event(
+            result.iter().find(|r| r.key == "key1").unwrap().clone(),
             &Created,
             None,
             Some(2),
             default_version_id(),
-            false,
-            true,
+        );
+
+        collecter.set_raw_events(FlatS3EventMessages(result));
+        let result = collecter.collect().await.unwrap();
+        client.ingest(result.event_type).await.unwrap();
+
+        let results = fetch_results_ordered(&client).await;
+        assert_eq!(results.len(), 2);
+        assert_crawl_record(
+            &results[0],
+            "000000000000000000000000000000-0100000000000000",
+            "key",
+            "bucket",
+        );
+        assert_crawl_record(
+            &results[1],
+            "000000000000000000000000000000-0100000000000000",
+            "key1",
+            "bucket",
         );
     }
 
@@ -227,9 +247,13 @@ pub(crate) mod tests {
                 .build()
                 .unwrap();
             let s3_client = mock_s3(&[
-                head_expectation(default_version_id.clone(), head),
-                put_tagging_expectation(default_version_id.clone(), expected_put_object_tagging()),
-                get_tagging_expectation(default_version_id.clone(), tagging),
+                head_expectation("key".to_string(), default_version_id.clone(), head),
+                put_tagging_expectation(
+                    "key".to_string(),
+                    default_version_id.clone(),
+                    expected_put_object_tagging(),
+                ),
+                get_tagging_expectation("key".to_string(), default_version_id.clone(), tagging),
             ]);
             let crawl_event = CollecterBuilder::default()
                 .with_s3_client(s3_client)
@@ -273,6 +297,36 @@ pub(crate) mod tests {
             // Clean up for next iteration.
             pool.execute("truncate s3_object").await.unwrap();
         }
+    }
+
+    fn assert_crawl_event(
+        event: FlatS3EventMessage,
+        event_type: &EventType,
+        sequencer: Option<String>,
+        size: Option<i64>,
+        version_id: String,
+    ) {
+        assert_eq!(&event.event_type, event_type);
+        assert_eq!(event.bucket, "bucket");
+        assert_eq!(event.version_id, version_id);
+        assert_eq!(event.size, size);
+        assert_eq!(event.e_tag, Some(EXPECTED_QUOTED_E_TAG.to_string()));
+        assert_eq!(event.sequencer, sequencer);
+        assert_eq!(event.storage_class, None);
+        assert_eq!(event.last_modified_date, None);
+        assert!(!event.is_delete_marker);
+        assert!(event.is_current_state);
+    }
+
+    fn assert_crawl_record(record: &PgRow, sequencer: &str, key: &str, bucket: &str) {
+        assert_eq!(record.get::<EventType, _>("event_type"), Created);
+        assert!(record.get::<bool, _>("is_current_state"));
+        assert!(!record.get::<bool, _>("is_delete_marker"));
+        assert_eq!(record.get::<String, _>("version_id"), default_version_id());
+
+        assert_eq!(record.get::<String, _>("bucket"), bucket);
+        assert_eq!(record.get::<String, _>("key"), key);
+        assert_eq!(record.get::<String, _>("sequencer"), sequencer);
     }
 
     fn crawl_record_states(version_id: String) -> Vec<Vec<FlatS3EventMessage>> {
@@ -359,7 +413,7 @@ pub(crate) mod tests {
                             )
                             .versions(
                                 ObjectVersion::builder()
-                                    .key("key")
+                                    .key("key1")
                                     .size(2)
                                     .is_latest(true)
                                     .e_tag(EXPECTED_QUOTED_E_TAG)

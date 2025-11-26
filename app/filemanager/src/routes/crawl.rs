@@ -415,10 +415,6 @@ pub(crate) mod tests {
         let (status, _) = crawl(&state).await;
 
         assert_eq!(status, StatusCode::NO_CONTENT);
-        // let result = state.into_crawl_result().await.unwrap();
-        //
-        // assert_eq!(result.status, Completed);
-        // assert_eq!(result.n_objects, Some(2));
     }
 
     #[sqlx::test(migrator = "MIGRATOR")]
@@ -484,14 +480,35 @@ pub(crate) mod tests {
         .await
     }
 
-    fn crawl_expectations() -> Client {
+    pub(crate) fn crawl_expectations() -> Client {
         list_object_expectations(&[
-            head_expectation(default_version_id().to_string(), expected_head_object()),
+            head_expectation(
+                "key".to_string(),
+                default_version_id().to_string(),
+                expected_head_object(),
+            ),
             put_tagging_expectation(
+                "key".to_string(),
                 default_version_id().to_string(),
                 expected_put_object_tagging(),
             ),
             get_tagging_expectation(
+                "key".to_string(),
+                default_version_id().to_string(),
+                expected_get_object_tagging(),
+            ),
+            head_expectation(
+                "key1".to_string(),
+                default_version_id().to_string(),
+                expected_head_object(),
+            ),
+            put_tagging_expectation(
+                "key1".to_string(),
+                default_version_id().to_string(),
+                expected_put_object_tagging(),
+            ),
+            get_tagging_expectation(
+                "key1".to_string(),
                 default_version_id().to_string(),
                 expected_get_object_tagging(),
             ),

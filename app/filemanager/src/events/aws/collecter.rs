@@ -181,6 +181,21 @@ impl<'a> Collecter<'a> {
         )
     }
 
+    /// Set the S3 client.
+    pub fn set_client(&mut self, client: S3Client) {
+        self.client = client;
+    }
+
+    /// Get the S3 client.
+    pub fn client(&self) -> &S3Client {
+        &self.client
+    }
+
+    /// Set the collecter's raw events.
+    pub fn set_raw_events(&mut self, raw_events: FlatS3EventMessages) {
+        self.raw_events = raw_events;
+    }
+
     /// Converts an AWS datetime to a standard database format.
     pub fn convert_datetime(datetime: Option<primitives::DateTime>) -> Option<DateTime<Utc>> {
         if let Some(head) = datetime {
@@ -514,6 +529,7 @@ pub(crate) mod tests {
         let mut collecter = test_collecter(&config, &client).await;
 
         collecter.client = mock_s3(&[head_expectation(
+            "key".to_string(),
             default_version_id(),
             expected_head_object(),
         )]);
@@ -626,8 +642,13 @@ pub(crate) mod tests {
             expected_s3_event_message().with_version_id(default_version_id()),
         ]);
         collecter.client = mock_s3(&[
-            head_expectation(default_version_id(), expected_head_object()),
+            head_expectation(
+                "key".to_string(),
+                default_version_id(),
+                expected_head_object(),
+            ),
             get_tagging_expectation(
+                "key".to_string(),
                 default_version_id(),
                 GetObjectTaggingOutput::builder()
                     .set_tag_set(Some(vec![
@@ -688,7 +709,11 @@ pub(crate) mod tests {
         ]);
 
         collecter.client = mock_s3(&[
-            head_expectation(default_version_id(), expected_head_object()),
+            head_expectation(
+                "key".to_string(),
+                default_version_id(),
+                expected_head_object(),
+            ),
             mock!(aws_sdk_s3::Client::get_object_tagging)
                 .match_requests(move |req| {
                     req.key() == Some("key")
@@ -747,10 +772,14 @@ pub(crate) mod tests {
         }
     }
 
-    pub(crate) fn head_expectation(version_id: String, output: HeadObjectOutput) -> Rule {
+    pub(crate) fn head_expectation(
+        key: String,
+        version_id: String,
+        output: HeadObjectOutput,
+    ) -> Rule {
         mock!(aws_sdk_s3::Client::head_object)
             .match_requests(move |req| {
-                req.key() == Some("key")
+                req.key() == Some(&key)
                     && req.bucket() == Some("bucket")
                     && ((version_id != default_version_id()
                         && req.version_id() == Some(&version_id.to_string()))
@@ -760,12 +789,13 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn put_tagging_expectation(
+        key: String,
         version_id: String,
         output: PutObjectTaggingOutput,
     ) -> Rule {
         mock!(aws_sdk_s3::Client::put_object_tagging)
             .match_requests(move |req| {
-                req.key() == Some("key")
+                req.key() == Some(&key)
                     && req.bucket() == Some("bucket")
                     && ((version_id != default_version_id()
                         && req.version_id() == Some(&version_id.to_string()))
@@ -778,12 +808,13 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn get_tagging_expectation(
+        key: String,
         version_id: String,
         output: GetObjectTaggingOutput,
     ) -> Rule {
         mock!(aws_sdk_s3::Client::get_object_tagging)
             .match_requests(move |req| {
-                req.key() == Some("key")
+                req.key() == Some(&key)
                     && req.bucket() == Some("bucket")
                     && ((version_id != default_version_id()
                         && req.version_id() == Some(&version_id.to_string()))
@@ -831,12 +862,18 @@ pub(crate) mod tests {
 
     pub(crate) fn s3_client_expectations() -> S3Client {
         mock_s3(&[
-            head_expectation(EXPECTED_VERSION_ID.to_string(), expected_head_object()),
+            head_expectation(
+                "key".to_string(),
+                EXPECTED_VERSION_ID.to_string(),
+                expected_head_object(),
+            ),
             put_tagging_expectation(
+                "key".to_string(),
                 EXPECTED_VERSION_ID.to_string(),
                 expected_put_object_tagging(),
             ),
             get_tagging_expectation(
+                "key".to_string(),
                 EXPECTED_VERSION_ID.to_string(),
                 expected_get_object_tagging(),
             ),
@@ -851,7 +888,10 @@ pub(crate) mod tests {
         HeadObjectError::NotFound(NotFound::builder().build())
     }
 
-    async fn test_collecter<'a>(config: &'a Config, database_client: &'a Client) -> Collecter<'a> {
+    pub(crate) async fn test_collecter<'a>(
+        config: &'a Config,
+        database_client: &'a Client,
+    ) -> Collecter<'a> {
         Collecter::new(
             mock_s3(&[]),
             database_client,

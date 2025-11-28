@@ -460,7 +460,7 @@ pub(crate) mod tests {
             state.clone(),
             "/s3/crawl",
             Method::POST,
-            Body::from(json!({"bucket": "bucket", "prefix": "prefix"}).to_string()),
+            Body::from(json!({"bucket": "bucket"}).to_string()),
         )
         .await
     }

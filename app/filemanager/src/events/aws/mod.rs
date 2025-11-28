@@ -798,7 +798,22 @@ impl From<Vec<FlatS3EventMessages>> for FlatS3EventMessages {
 }
 
 /// A wrapper around event messages to allow for calculating a diff compared to the database
-/// state. Checks for equality using the bucket, key and version_id.
+/// state. Checks for equality using the bucket, key and version_id. This is used to determine
+/// which records are ingested into the database when doing a crawl, in order to avoid ingesting
+/// records needlessly when the update would not change the information in the database
+/// meaningfully.
+///
+/// For this to occur, `Hash` and `PartialEq` are implemented using logic that determines which
+/// fields are considered "updatable", and should be ingested for a crawl, and which fields are not.
+/// This is then used to compare the difference between the database state and the incoming crawl
+/// objects using a `HashSet`.
+///
+/// The following fields are not considered meaningful, and therefore are allowed to be different
+/// for records to be considered the same:
+/// * `s3_object_id`
+/// * `event_time`
+/// * `reason`
+/// * `sequencer`
 #[derive(Debug, Eq, Clone)]
 pub struct DiffMessages(pub FlatS3EventMessage);
 
@@ -807,6 +822,17 @@ impl Hash for DiffMessages {
         self.0.bucket.hash(state);
         self.0.key.hash(state);
         self.0.version_id.hash(state);
+        self.0.size.hash(state);
+        self.0.e_tag.hash(state);
+        self.0.sha256.hash(state);
+        self.0.storage_class.hash(state);
+        self.0.last_modified_date.hash(state);
+        self.0.event_type.hash(state);
+        self.0.is_delete_marker.hash(state);
+        self.0.archive_status.hash(state);
+        self.0.ingest_id.hash(state);
+        self.0.is_current_state.hash(state);
+        self.0.attributes.hash(state);
     }
 }
 
@@ -815,6 +841,17 @@ impl PartialEq for DiffMessages {
         self.0.bucket == other.0.bucket
             && self.0.key == other.0.key
             && self.0.version_id == other.0.version_id
+            && self.0.size == other.0.size
+            && self.0.e_tag == other.0.e_tag
+            && self.0.sha256 == other.0.sha256
+            && self.0.storage_class == other.0.storage_class
+            && self.0.last_modified_date == other.0.last_modified_date
+            && self.0.event_type == other.0.event_type
+            && self.0.is_delete_marker == other.0.is_delete_marker
+            && self.0.archive_status == other.0.archive_status
+            && self.0.ingest_id == other.0.ingest_id
+            && self.0.is_current_state == other.0.is_current_state
+            && self.0.attributes == other.0.attributes
     }
 }
 

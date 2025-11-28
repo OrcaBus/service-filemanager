@@ -99,10 +99,12 @@ pub(crate) mod tests {
     use crate::database::Ingest;
     use crate::database::aws::ingester::tests::{fetch_results_ordered, test_ingester};
     use crate::database::aws::migration::tests::MIGRATOR;
+    use crate::database::entities::s3_object::{ActiveModel, Entity};
+    use crate::database::entities::sea_orm_active_enums;
+    use crate::database::entities::sea_orm_active_enums::ArchiveStatus;
     use crate::env::Config;
     use crate::events::Collect;
     use crate::events::EventSourceType;
-    use crate::events::aws::StorageClass;
     use crate::events::aws::StorageClass::Standard;
     use crate::events::aws::collecter::CollecterBuilder;
     use crate::events::aws::collecter::tests::{
@@ -110,7 +112,8 @@ pub(crate) mod tests {
         put_tagging_expectation, test_collecter,
     };
     use crate::events::aws::message::EventType::{Created, Deleted};
-    use crate::events::aws::tests::EXPECTED_QUOTED_E_TAG;
+    use crate::events::aws::tests::{EXPECTED_QUOTED_E_TAG, EXPECTED_SHA256};
+    use crate::events::aws::{StorageClass, TransposedS3EventMessages};
     use crate::routes::crawl::tests::crawl_expectations;
     use aws_sdk_s3::operation::get_object_tagging::GetObjectTaggingOutput;
     use aws_sdk_s3::operation::head_object::HeadObjectOutput;
@@ -120,6 +123,8 @@ pub(crate) mod tests {
     use aws_smithy_mocks::{Rule, RuleMode};
     use aws_smithy_mocks::{mock, mock_client};
     use itertools::Itertools;
+    use sea_orm::EntityTrait;
+    use sea_orm::{NotSet, Set};
     use sqlx::postgres::PgRow;
     use sqlx::{Executor, PgPool, Row};
     use std::str::FromStr;
@@ -162,70 +167,138 @@ pub(crate) mod tests {
         assert_eq!(results.len(), 2);
         assert_crawl_record(
             &results[0],
-            "000000000000000000000000000000-0100000000000000",
+            Some("000000000000000000000000000000-0100000000000000"),
             "key",
             "bucket",
+            true,
         );
         assert_crawl_record(
             &results[1],
-            "000000000000000000000000000000-0100000000000000",
+            Some("000000000000000000000000000000-0100000000000000"),
             "key1",
             "bucket",
+            true,
         );
     }
 
-    // #[sqlx::test(migrator = "MIGRATOR")]
-    // async fn crawl_messages_existing_entry(pool: PgPool) {
-    //     let client = database::Client::from_pool(pool);
-    //
-    //     let event = FlatS3EventMessage::new_with_generated_id()
-    //         .with_key("key".to_string())
-    //         .with_bucket("bucket".to_string())
-    //         .with_sequencer(Some("000000000000000000000000000000".to_string()))
-    //         .with_storage_class(Some(StorageClass::IntelligentTiering))
-    //         .with_ingest_id(Some(Uuid::default()))
-    //         .with_archive_status(Some(ArchiveStatus::DeepArchiveAccess))
-    //         .with_e_tag(Some(EXPECTED_QUOTED_E_TAG.to_string()))
-    //         .with_last_modified_date(Some("1970-01-01 00:00:00.000000 +00:00".parse().unwrap()))
-    //         .with_version_id(default_version_id())
-    //         .with_size(Some(1))
-    //         .with_is_current_state(true)
-    //         .with_sha256(Some(EXPECTED_SHA256.to_string()));
-    //
-    //     client.ingest(EventSourceType::S3(TransposedS3EventMessages::from(
-    //         FlatS3EventMessages(vec![event]),
-    //     ))).await.unwrap();
-    //
-    //     let config = Config::default();
-    //     let mut collecter = test_collecter(&config, &client).await;
-    //     collecter.set_client(crawl_expectations());
-    //     collecter.set_crawl_bucket("bucket".to_string());
-    //
-    //     let result = Crawl::new(collecter.client().clone())
-    //         .crawl_s3("bucket", None)
-    //         .await
-    //         .unwrap()
-    //         .into_inner();
-    //
-    //     collecter.set_raw_events(FlatS3EventMessages(result));
-    //     let result = collecter.collect().await.unwrap();
-    //     client.ingest(result.event_type).await.unwrap();
-    //
-    //     let results = fetch_results_ordered(&client).await;
-    //     assert_eq!(results.len(), 2);
-    //     assert_crawl_record(
-    //         &results[0],
-    //         "000000000000000000000000000000",
-    //         "key",
-    //         "bucket",
-    //     );
-    //     assert_crawl_record(
-    //         &results[1],
-    //         "000000000000000000000000000000-0100000000000000",
-    //         "key1",
-    //         "bucket",
-    //     );
-    // }
+    #[sqlx::test(migrator = "MIGRATOR")]
+    async fn crawl_messages_existing_entry(pool: PgPool) {
+        let client = database::Client::from_pool(pool);
+
+        let event = FlatS3EventMessage::new_with_generated_id()
+            .with_key("key".to_string())
+            .with_bucket("bucket".to_string())
+            .with_sequencer(Some("000000000000000000000000000000".to_string()))
+            .with_storage_class(Some(StorageClass::IntelligentTiering))
+            .with_ingest_id(Some(Uuid::default()))
+            .with_archive_status(Some(ArchiveStatus::DeepArchiveAccess))
+            .with_e_tag(Some(EXPECTED_QUOTED_E_TAG.to_string()))
+            .with_last_modified_date(Some("1970-01-01 00:00:00.000000 +00:00".parse().unwrap()))
+            .with_version_id(default_version_id())
+            .with_size(Some(1))
+            .with_is_current_state(true)
+            .with_sha256(Some(EXPECTED_SHA256.to_string()));
+
+        client
+            .ingest(EventSourceType::S3(TransposedS3EventMessages::from(
+                FlatS3EventMessages(vec![event]),
+            )))
+            .await
+            .unwrap();
+
+        let config = Config::default();
+        let mut collecter = test_collecter(&config, &client).await;
+        collecter.set_client(crawl_expectations());
+        collecter.set_crawl_bucket("bucket".to_string());
+
+        let result = Crawl::new(collecter.client().clone())
+            .crawl_s3("bucket", None)
+            .await
+            .unwrap()
+            .into_inner();
+
+        collecter.set_raw_events(FlatS3EventMessages(result));
+        let result = collecter.collect().await.unwrap();
+        client.ingest(result.event_type).await.unwrap();
+
+        let results = fetch_results_ordered(&client).await;
+        assert_eq!(results.len(), 2);
+        assert_crawl_record(
+            &results[0],
+            Some("000000000000000000000000000000"),
+            "key",
+            "bucket",
+            true,
+        );
+        assert_crawl_record(
+            &results[1],
+            Some("000000000000000000000000000000-0100000000000000"),
+            "key1",
+            "bucket",
+            true,
+        );
+    }
+
+    #[sqlx::test(migrator = "MIGRATOR")]
+    async fn crawl_messages_existing_entry_null_sequencer(pool: PgPool) {
+        let client = database::Client::from_pool(pool);
+
+        // Mimic old database logic by ingesting a null sequencer directly.
+        let event = ActiveModel {
+            s3_object_id: Set(UuidGenerator::generate()),
+            event_type: Set(sea_orm_active_enums::EventType::Created),
+            key: Set("key".to_string()),
+            bucket: Set("bucket".to_string()),
+            sequencer: NotSet,
+            storage_class: Set(Some(sea_orm_active_enums::StorageClass::IntelligentTiering)),
+            ingest_id: Set(Some(Uuid::default())),
+            archive_status: Set(Some(ArchiveStatus::DeepArchiveAccess)),
+            e_tag: Set(Some(EXPECTED_QUOTED_E_TAG.to_string())),
+            last_modified_date: Set(Some("1970-01-01 00:00:00.000000 +00:00".parse().unwrap())),
+            version_id: Set(default_version_id()),
+            size: Set(Some(1)),
+            is_current_state: Set(true),
+            sha256: Set(Some(EXPECTED_SHA256.to_string())),
+            ..Default::default()
+        };
+        Entity::insert(event)
+            .exec(client.connection_ref())
+            .await
+            .unwrap();
+
+        let config = Config::default();
+        let mut collecter = test_collecter(&config, &client).await;
+        collecter.set_client(crawl_expectations());
+        collecter.set_crawl_bucket("bucket".to_string());
+
+        let result = Crawl::new(collecter.client().clone())
+            .crawl_s3("bucket", None)
+            .await
+            .unwrap()
+            .into_inner();
+
+        collecter.set_raw_events(FlatS3EventMessages(result));
+        let result = collecter.collect().await.unwrap();
+        client.ingest(result.event_type).await.unwrap();
+
+        let results = fetch_results_ordered(&client).await;
+        assert_eq!(results.len(), 3);
+        assert_crawl_record(
+            &results[0],
+            Some("000000000000000000000000000000-0100000000000000"),
+            "key",
+            "bucket",
+            true,
+        );
+        assert_crawl_record(
+            &results[1],
+            Some("000000000000000000000000000000-0100000000000000"),
+            "key1",
+            "bucket",
+            true,
+        );
+        assert_crawl_record(&results[2], None, "key", "bucket", false);
+    }
 
     #[sqlx::test(migrator = "MIGRATOR")]
     async fn crawl_message_always_latest(pool: PgPool) {
@@ -343,15 +416,21 @@ pub(crate) mod tests {
         assert!(event.is_current_state);
     }
 
-    fn assert_crawl_record(record: &PgRow, sequencer: &str, key: &str, bucket: &str) {
+    fn assert_crawl_record(
+        record: &PgRow,
+        sequencer: Option<&str>,
+        key: &str,
+        bucket: &str,
+        is_current_state: bool,
+    ) {
         assert_eq!(record.get::<EventType, _>("event_type"), Created);
-        assert!(record.get::<bool, _>("is_current_state"));
+        assert_eq!(record.get::<bool, _>("is_current_state"), is_current_state);
         assert!(!record.get::<bool, _>("is_delete_marker"));
         assert_eq!(record.get::<String, _>("version_id"), default_version_id());
 
         assert_eq!(record.get::<String, _>("bucket"), bucket);
         assert_eq!(record.get::<String, _>("key"), key);
-        assert_eq!(record.get::<String, _>("sequencer"), sequencer);
+        assert_eq!(record.get::<Option<&str>, _>("sequencer"), sequencer);
     }
 
     fn crawl_record_states(version_id: String) -> Vec<Vec<FlatS3EventMessage>> {

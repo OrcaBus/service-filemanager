@@ -464,6 +464,23 @@ impl<'a> Collecter<'a> {
             FlatS3EventMessages(database_state),
         ));
 
+        // Records with null sequencers need to be treated specially, because they should always
+        // trigger an update in the database, in order to remove the null sequencer. First, find
+        // the records that have null sequencers, and then remove them from the diff comparison
+        // so that they can always be updated.
+        let (null_sequencer, database_state): (HashSet<_>, HashSet<_>) = database_state
+            .into_iter()
+            .partition(|state| state.0.sequencer.is_none());
+        let (always_update, s3_state): (HashSet<_>, HashSet<_>) =
+            s3_state.into_iter().partition(|state| {
+                null_sequencer.iter().any(|database| {
+                    database.0.key == state.0.key && database.0.bucket == state.0.bucket
+                })
+            });
+
+        // The state in S3 minus the state in the database represents new records that should be
+        // inserted.
+        let diff_created = s3_state.difference(&database_state).cloned().collect_vec();
         // All records that are not in the crawl, but are in the database represent records that
         // should be deleted from the database. This is represented by the difference between the
         // database state and the crawl state.
@@ -477,7 +494,12 @@ impl<'a> Collecter<'a> {
                 record
             })
             .collect_vec();
-        let diff = [s3_state.into_iter().collect_vec(), diff_deleted].concat();
+        let diff = [
+            always_update.into_iter().collect_vec(),
+            diff_created,
+            diff_deleted,
+        ]
+        .concat();
 
         Ok(FlatS3EventMessages::from(diff))
     }

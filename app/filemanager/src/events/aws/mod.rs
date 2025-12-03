@@ -798,7 +798,10 @@ impl From<Vec<FlatS3EventMessages>> for FlatS3EventMessages {
 }
 
 /// A wrapper around event messages to allow for calculating a diff compared to the database
-/// state. Checks for equality using the bucket, key and version_id. This is used to determine
+/// state. Used to calculate the different between the database state and an incoming crawl to
+/// determine which new `Created` records should be ingested into the database.
+///
+/// Checks for equality using the bucket, key and version_id. This is used to determine
 /// which records are ingested into the database when doing a crawl, in order to avoid ingesting
 /// records needlessly when the update would not change the information in the database
 /// meaningfully.
@@ -815,9 +818,9 @@ impl From<Vec<FlatS3EventMessages>> for FlatS3EventMessages {
 /// * `reason`
 /// * `sequencer`
 #[derive(Debug, Eq, Clone)]
-pub struct DiffMessages(pub FlatS3EventMessage);
+pub struct DiffCrawlCreatedMessage(pub FlatS3EventMessage);
 
-impl Hash for DiffMessages {
+impl Hash for DiffCrawlCreatedMessage {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.bucket.hash(state);
         self.0.key.hash(state);
@@ -836,7 +839,7 @@ impl Hash for DiffMessages {
     }
 }
 
-impl PartialEq for DiffMessages {
+impl PartialEq for DiffCrawlCreatedMessage {
     fn eq(&self, other: &Self) -> bool {
         self.0.bucket == other.0.bucket
             && self.0.key == other.0.key
@@ -855,15 +858,66 @@ impl PartialEq for DiffMessages {
     }
 }
 
-impl From<FlatS3EventMessages> for Vec<DiffMessages> {
+impl From<FlatS3EventMessages> for Vec<DiffCrawlCreatedMessage> {
     fn from(value: FlatS3EventMessages) -> Self {
-        value.0.into_iter().map(DiffMessages).collect()
+        value.0.into_iter().map(DiffCrawlCreatedMessage).collect()
     }
 }
 
-impl From<Vec<DiffMessages>> for FlatS3EventMessages {
-    fn from(value: Vec<DiffMessages>) -> Self {
+impl From<Vec<DiffCrawlCreatedMessage>> for FlatS3EventMessages {
+    fn from(value: Vec<DiffCrawlCreatedMessage>) -> Self {
         Self(value.into_iter().map(|diff| diff.0).collect())
+    }
+}
+
+impl From<DiffCrawlCreatedMessage> for DiffCrawlDeletedMessage {
+    fn from(value: DiffCrawlCreatedMessage) -> Self {
+        Self(value.0)
+    }
+}
+
+/// A wrapper around event messages to allow for calculating a diff compared to the database
+/// state. Used to calculate the different between the database state and an incoming crawl to
+/// determine which new `Deleted` records should be ingested into the database.
+///
+/// Checks for equality using the bucket, key and version_id. This is the only information needed
+/// to determine which records to delete. Notably, this is different from `DiffCrawlCreatedMessages`
+/// as it does not take into account other fields, which aren't required for comparing the database
+/// diff when removing an event.
+#[derive(Debug, Eq, Clone)]
+pub struct DiffCrawlDeletedMessage(pub FlatS3EventMessage);
+
+impl Hash for DiffCrawlDeletedMessage {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.bucket.hash(state);
+        self.0.key.hash(state);
+        self.0.version_id.hash(state);
+    }
+}
+
+impl PartialEq for DiffCrawlDeletedMessage {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.bucket == other.0.bucket
+            && self.0.key == other.0.key
+            && self.0.version_id == other.0.version_id
+    }
+}
+
+impl From<FlatS3EventMessages> for Vec<DiffCrawlDeletedMessage> {
+    fn from(value: FlatS3EventMessages) -> Self {
+        value.0.into_iter().map(DiffCrawlDeletedMessage).collect()
+    }
+}
+
+impl From<Vec<DiffCrawlDeletedMessage>> for FlatS3EventMessages {
+    fn from(value: Vec<DiffCrawlDeletedMessage>) -> Self {
+        Self(value.into_iter().map(|diff| diff.0).collect())
+    }
+}
+
+impl From<DiffCrawlDeletedMessage> for DiffCrawlCreatedMessage {
+    fn from(value: DiffCrawlDeletedMessage) -> Self {
+        Self(value.0)
     }
 }
 
@@ -872,7 +926,8 @@ pub(crate) mod tests {
     use crate::database::entities::sea_orm_active_enums::Reason;
     use crate::events::aws::message::{Message, Record};
     use crate::events::aws::{
-        DiffMessages, EventType, FlatS3EventMessage, FlatS3EventMessages, TransposedS3EventMessages,
+        DiffCrawlCreatedMessage, EventType, FlatS3EventMessage, FlatS3EventMessages,
+        TransposedS3EventMessages,
     };
     use serde_json::{Value, json};
     use std::collections::HashSet;
@@ -925,15 +980,17 @@ pub(crate) mod tests {
             },
         ];
 
-        let inventory_records: HashSet<DiffMessages> = HashSet::from_iter(
-            Vec::<DiffMessages>::from(FlatS3EventMessages(inventory_records)),
-        );
-        let database_records: HashSet<DiffMessages> = HashSet::from_iter(
-            Vec::<DiffMessages>::from(FlatS3EventMessages(database_records)),
-        );
+        let inventory_records: HashSet<DiffCrawlCreatedMessage> =
+            HashSet::from_iter(Vec::<DiffCrawlCreatedMessage>::from(FlatS3EventMessages(
+                inventory_records,
+            )));
+        let database_records: HashSet<DiffCrawlCreatedMessage> =
+            HashSet::from_iter(Vec::<DiffCrawlCreatedMessage>::from(FlatS3EventMessages(
+                database_records,
+            )));
 
         let diff = &inventory_records - &database_records;
-        let expected = HashSet::from_iter(vec![DiffMessages(FlatS3EventMessage {
+        let expected = HashSet::from_iter(vec![DiffCrawlCreatedMessage(FlatS3EventMessage {
             bucket: "bucket".to_string(),
             key: "key2".to_string(),
             version_id: "version".to_string(),

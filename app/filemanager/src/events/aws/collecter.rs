@@ -10,8 +10,8 @@ use crate::env::Config;
 use crate::error::Error::{S3Error, SQSError, SerdeError};
 use crate::error::{Error, Result};
 use crate::events::aws::{
-    DiffMessages, EventType, FlatS3EventMessage, FlatS3EventMessages, StorageClass,
-    TransposedS3EventMessages,
+    DiffCrawlCreatedMessage, DiffCrawlDeletedMessage, EventType, FlatS3EventMessage,
+    FlatS3EventMessages, StorageClass, TransposedS3EventMessages,
 };
 use crate::events::{Collect, EventSource, EventSourceType};
 use crate::queries::list::ListQueryBuilder;
@@ -459,10 +459,12 @@ impl<'a> Collecter<'a> {
         // The difference keeps the records that need to be deleted from the database.
         // All new crawl events should be appended to the database, this could have efficiency
         // improved to ignore updates where the crawl event is exactly the same as the database state
-        let s3_state: HashSet<DiffMessages> = HashSet::from_iter(Vec::<DiffMessages>::from(events));
-        let database_state: HashSet<DiffMessages> = HashSet::from_iter(Vec::<DiffMessages>::from(
-            FlatS3EventMessages(database_state),
-        ));
+        let s3_state: HashSet<DiffCrawlCreatedMessage> =
+            HashSet::from_iter(Vec::<DiffCrawlCreatedMessage>::from(events));
+        let database_state: HashSet<DiffCrawlCreatedMessage> =
+            HashSet::from_iter(Vec::<DiffCrawlCreatedMessage>::from(FlatS3EventMessages(
+                database_state,
+            )));
 
         // Records with null sequencers need to be treated specially, because they should always
         // trigger an update in the database, in order to remove the null sequencer. First, find
@@ -484,20 +486,30 @@ impl<'a> Collecter<'a> {
         // All records that are not in the crawl, but are in the database represent records that
         // should be deleted from the database. This is represented by the difference between the
         // database state and the crawl state.
-        let diff_deleted = database_state
-            .difference(&s3_state)
-            .cloned()
-            .map(|mut record| {
-                // Update these to deleted events, as these should be removed from the database.
-                record.0.is_current_state = false;
-                record.0.event_type = EventType::Deleted;
-                record
-            })
-            .collect_vec();
+        let diff_deleted = HashSet::<DiffCrawlDeletedMessage>::from_iter(
+            database_state
+                .into_iter()
+                .map(DiffCrawlDeletedMessage::from),
+        )
+        .difference(&HashSet::from_iter(
+            s3_state.into_iter().map(DiffCrawlDeletedMessage::from),
+        ))
+        .cloned()
+        .map(|mut record| {
+            // Update these to deleted events, as these should be removed from the database.
+            record.0.is_current_state = false;
+            record.0.event_type = EventType::Deleted;
+            record
+        })
+        .collect_vec();
+
         let diff = [
             always_update.into_iter().collect_vec(),
             diff_created,
-            diff_deleted,
+            diff_deleted
+                .into_iter()
+                .map(DiffCrawlCreatedMessage::from)
+                .collect_vec(),
         ]
         .concat();
 

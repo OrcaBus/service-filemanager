@@ -19,7 +19,7 @@ use crate::error::Result;
 use crate::events::aws::collecter::CollecterBuilder;
 use crate::events::aws::inventory::{Inventory, Manifest};
 use crate::events::aws::message::EventType;
-use crate::events::aws::{DiffMessages, FlatS3EventMessages, TransposedS3EventMessages};
+use crate::events::aws::{DiffCrawlCreatedMessage, FlatS3EventMessages, TransposedS3EventMessages};
 use crate::events::{Collect, EventSourceType};
 
 /// Handle SQS events by manually calling the SQS receive function. This is meant
@@ -133,11 +133,12 @@ pub async fn ingest_s3_inventory(
 
     // Some back and forth between transposed vs not transposed events. Potential optimization
     // could involve using ndarray + slicing, with an enum representing the fields of the struct.
-    let transposed_events: HashSet<DiffMessages> = HashSet::from_iter(Vec::<DiffMessages>::from(
-        FlatS3EventMessages::from(transposed_events),
-    ));
-    let database_records: HashSet<DiffMessages> =
-        HashSet::from_iter(Vec::<DiffMessages>::from(database_records));
+    let transposed_events: HashSet<DiffCrawlCreatedMessage> =
+        HashSet::from_iter(Vec::<DiffCrawlCreatedMessage>::from(
+            FlatS3EventMessages::from(transposed_events),
+        ));
+    let database_records: HashSet<DiffCrawlCreatedMessage> =
+        HashSet::from_iter(Vec::<DiffCrawlCreatedMessage>::from(database_records));
 
     // The difference keeps the records that need to be crawled
     let diff_created = transposed_events

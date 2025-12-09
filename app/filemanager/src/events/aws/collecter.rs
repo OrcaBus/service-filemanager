@@ -5,7 +5,7 @@ use crate::clients::aws::s3::Client as S3Client;
 use crate::clients::aws::sqs::Client as SQSClient;
 use crate::database;
 use crate::database::entities::s3_object;
-use crate::database::entities::sea_orm_active_enums::ArchiveStatus;
+use crate::database::entities::sea_orm_active_enums::{ArchiveStatus, Reason};
 use crate::env::Config;
 use crate::error::Error::{S3Error, SQSError, SerdeError};
 use crate::error::{Error, Result};
@@ -499,6 +499,12 @@ impl<'a> Collecter<'a> {
             // Update these to deleted events, as these should be removed from the database.
             record.0.is_current_state = false;
             record.0.event_type = EventType::Deleted;
+            // This needs to be like a crawl event, so the s3 object id, sequencer, time and reason
+            // should be refreshed.
+            record.0.s3_object_id = UuidGenerator::generate();
+            record.0.event_time = Some(Utc::now());
+            record.0.sequencer = None;
+            record.0.reason = Reason::Crawl;
             record
         })
         .collect_vec();

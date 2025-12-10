@@ -527,6 +527,27 @@ pub(crate) mod tests {
             archive_status: Set(Some(ArchiveStatus::DeepArchiveAccess)),
             e_tag: Set(Some(EXPECTED_QUOTED_E_TAG.to_string())),
             last_modified_date: Set(Some("1970-01-01 00:00:00.000000 +00:00".parse().unwrap())),
+            version_id: Set("old_version_id".to_string()),
+            size: Set(Some(1)),
+            is_current_state: Set(true),
+            sha256: Set(Some(EXPECTED_SHA256.to_string())),
+            ..Default::default()
+        };
+        Entity::insert(event)
+            .exec(client.connection_ref())
+            .await
+            .unwrap();
+        let event = ActiveModel {
+            s3_object_id: Set(UuidGenerator::generate()),
+            event_type: Set(sea_orm_active_enums::EventType::Created),
+            key: Set("key".to_string()),
+            bucket: Set("bucket".to_string()),
+            sequencer: NotSet,
+            storage_class: Set(Some(sea_orm_active_enums::StorageClass::IntelligentTiering)),
+            ingest_id: Set(Some(Uuid::default())),
+            archive_status: Set(Some(ArchiveStatus::DeepArchiveAccess)),
+            e_tag: Set(Some(EXPECTED_QUOTED_E_TAG.to_string())),
+            last_modified_date: Set(Some("1970-01-01 00:00:00.000000 +00:00".parse().unwrap())),
             version_id: Set(default_version_id()),
             size: Set(Some(1)),
             is_current_state: Set(true),

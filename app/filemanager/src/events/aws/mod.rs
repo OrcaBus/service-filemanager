@@ -798,7 +798,7 @@ impl From<Vec<FlatS3EventMessages>> for FlatS3EventMessages {
 }
 
 /// A wrapper around event messages to allow for calculating a diff compared to the database
-/// state. Used to calculate the different between the database state and an incoming crawl to
+/// state. Used to calculate the difference between the database state and an incoming crawl to
 /// determine which new `Created` records should be ingested into the database.
 ///
 /// Checks for equality using the bucket, key and version_id. This is used to determine
@@ -877,7 +877,7 @@ impl From<DiffCrawlCreatedMessage> for DiffCrawlDeletedMessage {
 }
 
 /// A wrapper around event messages to allow for calculating a diff compared to the database
-/// state. Used to calculate the different between the database state and an incoming crawl to
+/// state. Used to calculate the difference between the database state and an incoming crawl to
 /// determine which new `Deleted` records should be ingested into the database.
 ///
 /// Checks for equality using the bucket, key and version_id. This is the only information needed

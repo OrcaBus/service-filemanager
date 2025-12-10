@@ -441,14 +441,14 @@ impl<'a> Collecter<'a> {
                         bucket: Wildcard::new(crawl_bucket).into(),
                         key: Wildcard::new(format!(
                             "{}{}",
-                            crawl_prefix.unwrap_or_default().clone(),
+                            crawl_prefix.unwrap_or_default(),
                             "*"
                         ))
                         .into(),
                         ..Default::default()
                     },
                     true,
-                    true,
+                    false,
                 )?
                 .all()
                 .await?
@@ -476,7 +476,7 @@ impl<'a> Collecter<'a> {
         let (always_update, s3_state): (HashSet<_>, HashSet<_>) =
             s3_state.into_iter().partition(|state| {
                 null_sequencer.iter().any(|database| {
-                    database.0.key == state.0.key && database.0.bucket == state.0.bucket
+                    database.0.key == state.0.key && database.0.bucket == state.0.bucket && database.0.version_id == state.0.version_id
                 })
             });
 

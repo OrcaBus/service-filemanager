@@ -224,6 +224,8 @@ pub async fn crawl_sync_s3(
         .one(&conn)
         .await?
         .ok_or_else(|| CrawlError("expected crawl entry".to_string()))?;
+    conn.commit().await?;
+
     Ok(extract::Json(entry))
 }
 

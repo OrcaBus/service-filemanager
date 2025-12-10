@@ -1,10 +1,9 @@
 //! This module converts storage events into database objects.
 //!
 
-use async_trait::async_trait;
-
 use crate::error::Result;
 use crate::events::aws::{Events, TransposedS3EventMessages};
+use async_trait::async_trait;
 
 pub mod aws;
 

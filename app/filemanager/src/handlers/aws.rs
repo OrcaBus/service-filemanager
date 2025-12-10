@@ -17,9 +17,9 @@ use crate::env::Config as EnvConfig;
 use crate::error::Error::ConfigError;
 use crate::error::Result;
 use crate::events::aws::collecter::CollecterBuilder;
-use crate::events::aws::inventory::{DiffMessages, Inventory, Manifest};
-use crate::events::aws::message::EventType::Created;
-use crate::events::aws::{FlatS3EventMessages, TransposedS3EventMessages};
+use crate::events::aws::inventory::{Inventory, Manifest};
+use crate::events::aws::message::EventType;
+use crate::events::aws::{DiffCrawlCreatedMessage, FlatS3EventMessages, TransposedS3EventMessages};
 use crate::events::{Collect, EventSourceType};
 
 /// Handle SQS events by manually calling the SQS receive function. This is meant
@@ -129,25 +129,34 @@ pub async fn ingest_s3_inventory(
     tx.commit().await?;
 
     // Get only the current created state of records.
-    let database_records = FlatS3EventMessages(
-        database_records
-            .0
-            .into_iter()
-            .filter(|record| record.event_type == Created)
-            .collect(),
-    );
+    let database_records = FlatS3EventMessages(database_records.0.into_iter().collect());
 
     // Some back and forth between transposed vs not transposed events. Potential optimization
     // could involve using ndarray + slicing, with an enum representing the fields of the struct.
-    let transposed_events: HashSet<DiffMessages> = HashSet::from_iter(Vec::<DiffMessages>::from(
-        FlatS3EventMessages::from(transposed_events),
-    ));
-    let database_records: HashSet<DiffMessages> =
-        HashSet::from_iter(Vec::<DiffMessages>::from(database_records));
+    let transposed_events: HashSet<DiffCrawlCreatedMessage> =
+        HashSet::from_iter(Vec::<DiffCrawlCreatedMessage>::from(
+            FlatS3EventMessages::from(transposed_events),
+        ));
+    let database_records: HashSet<DiffCrawlCreatedMessage> =
+        HashSet::from_iter(Vec::<DiffCrawlCreatedMessage>::from(database_records));
 
-    // Note, it isn't strictly necessary to perform a diff as the database will handle duplicate
-    // records, however this saves some unnecessary database processing.
-    let diff = &transposed_events - &database_records;
+    // The difference keeps the records that need to be crawled
+    let diff_created = transposed_events
+        .difference(&database_records)
+        .cloned()
+        .collect_vec();
+    // All records that are not in the inventory, but are in the database represent records that
+    // should be deleted from the database.
+    let diff_deleted = database_records
+        .difference(&transposed_events)
+        .cloned()
+        .map(|mut record| {
+            record.0.event_type = EventType::Deleted;
+            record.0.is_current_state = false;
+            record
+        })
+        .collect_vec();
+    let diff = [diff_created, diff_deleted].concat();
 
     if diff.is_empty() {
         debug!("no diff found between database and inventory");
@@ -161,7 +170,7 @@ pub async fn ingest_s3_inventory(
         // unless the state of the S3 bucket was kept the same.
         // TODO: add option to check for object existence with HeadObject before ingesting.
         let events = EventSourceType::S3(TransposedS3EventMessages::from(
-            FlatS3EventMessages::from(diff.into_iter().collect_vec()),
+            FlatS3EventMessages::from(diff),
         ));
 
         database_client.ingest(events).await?;
@@ -221,6 +230,7 @@ pub(crate) mod tests {
         EXPECTED_LAST_MODIFIED_ONE, EXPECTED_LAST_MODIFIED_THREE, EXPECTED_LAST_MODIFIED_TWO,
         EXPECTED_QUOTED_E_TAG_KEY_2, MANIFEST_BUCKET, csv_manifest_from_key_expectations,
     };
+    use crate::events::aws::message::EventType::Created;
     use crate::events::aws::message::EventType::Deleted;
     use crate::events::aws::message::default_version_id;
     use crate::events::aws::tests::{

@@ -35,9 +35,9 @@ pub enum Error {
     S3Error(String),
     #[error("{0}")]
     IoError(#[from] io::Error),
-    #[error("numerical operation overflowed")]
+    #[error("operation overflowed")]
     OverflowError,
-    #[error("numerical conversion failed: `{0}`")]
+    #[error("conversion failed: `{0}`")]
     ConversionError(String),
     #[error("query error: `{0}`")]
     QueryError(String),

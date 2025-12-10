@@ -39,8 +39,8 @@ impl<T> WildcardEither<T> {
     }
 }
 
-/// A wildcard type represents a filter to match arbitrary characters. Use '%' for multiple characters
-/// and '_' for a single character. Use '\\' to escape these characters. Wildcards are converted to
+/// A wildcard type represents a filter to match arbitrary characters. Use '*' for multiple characters
+/// and '?' for a single character. Use '\\' to escape these characters. Wildcards are converted to
 /// postgres `like` or `ilike` queries.
 #[derive(Serialize, Deserialize, Debug, Default, ToSchema, Eq, PartialEq, Clone)]
 #[serde(default, rename_all = "camelCase")]

@@ -571,11 +571,18 @@ pub(crate) mod tests {
 
         let results = fetch_results(&client).await;
         assert_eq!(results.len(), 3);
-        assert_eq_crawl_event(results[0].clone(), event);
-        assert_eq!(results[1], event.clone().with_key("key1".to_string()));
-        assert_eq!(
-            results[2],
-            event.with_sequencer(None).with_is_current_state(false)
+        assert_eq_crawl_event(results[0].clone(), event.clone().with_reason(Reason::Crawl));
+        assert_eq_crawl_event(
+            results[1].clone(),
+            event
+                .clone()
+                .with_key("key1".to_string())
+                .with_size(Some(2))
+                .with_reason(Reason::Crawl),
+        );
+        assert_eq_crawl_event(
+            results[2].clone(),
+            event.with_sequencer(None).with_is_current_state(false),
         );
     }
 

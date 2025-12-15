@@ -416,22 +416,26 @@ impl FlatS3EventMessages {
     pub fn dedup(self) -> Self {
         let messages = self.into_inner();
 
-        Self(
-            messages
-                .into_iter()
-                .unique_by(|value| {
-                    (
-                        value.sequencer.clone(),
-                        value.event_type.clone(),
-                        value.bucket.clone(),
-                        value.key.clone(),
-                        value.version_id.clone(),
-                        // Note, `last_modified` and `storage_class` are always `None` at this point anyway so don't need
-                        // to be considered. `size` and `e_tag` should be the same but are unimportant in deduplication.
-                    )
-                })
-                .collect(),
-        )
+        // Events with a null sequencer are always considered unique.
+        let (null_sequencer, messages): (Vec<_>, Vec<_>) = messages
+            .into_iter()
+            .partition(|event| event.sequencer.is_none());
+        let messages = messages
+            .into_iter()
+            .unique_by(|value| {
+                (
+                    value.sequencer.clone(),
+                    value.event_type.clone(),
+                    value.bucket.clone(),
+                    value.key.clone(),
+                    value.version_id.clone(),
+                    // Note, `last_modified` and `storage_class` are always `None` at this point anyway so don't need
+                    // to be considered. `size` and `e_tag` should be the same but are unimportant in deduplication.
+                )
+            })
+            .collect_vec();
+
+        Self([null_sequencer, messages].concat())
     }
 
     /// Ordering is implemented so that the sequencer values are considered when the bucket, the
@@ -823,6 +827,48 @@ pub(crate) mod tests {
             second,
             &EventType::Deleted,
             Some(EXPECTED_SEQUENCER_DELETED_ONE.to_string()),
+            None,
+            EXPECTED_VERSION_ID.to_string(),
+            false,
+            false,
+        );
+    }
+
+    #[test]
+    fn test_sort_and_dedup_null_sequencer() {
+        let mut events = expected_flat_events_simple();
+        events.0.iter_mut().for_each(|event| event.sequencer = None);
+        let events = events.sort_and_dedup();
+
+        let mut result = events.into_inner().into_iter();
+
+        let first = result.next().unwrap();
+        assert_flat_s3_event(
+            first,
+            &EventType::Created,
+            None,
+            Some(0),
+            EXPECTED_VERSION_ID.to_string(),
+            false,
+            true,
+        );
+
+        let second = result.next().unwrap();
+        assert_flat_s3_event(
+            second,
+            &EventType::Created,
+            None,
+            Some(0),
+            EXPECTED_VERSION_ID.to_string(),
+            false,
+            true,
+        );
+
+        let third = result.next().unwrap();
+        assert_flat_s3_event(
+            third,
+            &EventType::Deleted,
+            None,
             None,
             EXPECTED_VERSION_ID.to_string(),
             false,

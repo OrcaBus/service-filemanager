@@ -4,10 +4,11 @@
 use crate::clients::aws::s3::Client as S3Client;
 use crate::clients::aws::sqs::Client as SQSClient;
 use crate::database;
+use crate::database::aws::ingester::Ingester;
 use crate::database::entities::s3_object;
 use crate::database::entities::sea_orm_active_enums::{ArchiveStatus, Reason};
 use crate::env::Config;
-use crate::error::Error::{S3Error, SQSError, SerdeError};
+use crate::error::Error::{CrawlError, S3Error, SQSError, SerdeError};
 use crate::error::{Error, Result};
 use crate::events::aws::{
     DiffCrawlCreatedMessage, DiffCrawlDeletedMessage, EventType, FlatS3EventMessage,
@@ -433,18 +434,16 @@ impl<'a> Collecter<'a> {
         crawl_bucket: String,
         crawl_prefix: Option<String>,
     ) -> Result<FlatS3EventMessages> {
-        // Get crawl list object details ensuring that the current database state is taken into account.
+        // Get crawl list object details ensuring that all object versions are taken into account.
+        // Note that this fetches non-current objects too in order to crawl old object versions.
+        // This gets the most current record for each object version.
         let database_state: Vec<FlatS3EventMessage> =
             ListQueryBuilder::<_, s3_object::Entity>::new(database_client.connection_ref())
                 .filter_all(
                     S3ObjectsFilter {
                         bucket: Wildcard::new(crawl_bucket).into(),
-                        key: Wildcard::new(format!(
-                            "{}{}",
-                            crawl_prefix.unwrap_or_default(),
-                            "*"
-                        ))
-                        .into(),
+                        key: Wildcard::new(format!("{}{}", crawl_prefix.unwrap_or_default(), "*"))
+                            .into(),
                         ..Default::default()
                     },
                     true,
@@ -454,7 +453,18 @@ impl<'a> Collecter<'a> {
                 .await?
                 .into_iter()
                 .map(FlatS3EventMessage::from)
-                .collect();
+                .filter(|object| object.event_type == EventType::Created)
+                .chunk_by(|object| format!("{}{}{}", object.bucket, object.key, object.version_id))
+                .into_iter()
+                .map(|(_, objects)| {
+                    FlatS3EventMessages(objects.collect_vec())
+                        .sort()
+                        .0
+                        .into_iter()
+                        .last()
+                        .ok_or_else(|| CrawlError("expected at least one element".to_string()))
+                })
+                .collect::<Result<_>>()?;
 
         // The difference keeps the records that need to be deleted from the database.
         // All new crawl events should be appended to the database, this could have efficiency
@@ -470,15 +480,43 @@ impl<'a> Collecter<'a> {
         // trigger an update in the database, in order to remove the null sequencer. First, find
         // the records that have null sequencers, and then remove them from the diff comparison
         // so that they can always be updated.
-        let (null_sequencer, database_state): (HashSet<_>, HashSet<_>) = database_state
+        let (null_sequencer, mut database_state): (HashSet<_>, HashSet<_>) = database_state
             .into_iter()
             .partition(|state| state.0.sequencer.is_none());
+        let mut null_sequencer = null_sequencer.into_iter().collect_vec();
         let (always_update, s3_state): (HashSet<_>, HashSet<_>) =
             s3_state.into_iter().partition(|state| {
-                null_sequencer.iter().any(|database| {
-                    database.0.key == state.0.key && database.0.bucket == state.0.bucket && database.0.version_id == state.0.version_id
-                })
+                match null_sequencer.iter().position(|database| {
+                    database.0.key == state.0.key
+                        && database.0.bucket == state.0.bucket
+                        && database.0.version_id == state.0.version_id
+                }) {
+                    Some(database) => {
+                        // Remove elements that are found because any remaining null sequencers
+                        // represent deleted objects that need to go back into the comparison.
+                        null_sequencer.swap_remove(database);
+                        true
+                    }
+                    None => false,
+                }
             });
+
+        // Re-increment the sequencer for current state events in order to avoid issues with
+        // duplicate sequencer values across object versions.
+        let always_update = always_update
+            .into_iter()
+            .map(|mut event| {
+                if event.0.is_current_state {
+                    let new_sequencer = Ingester::increment_sequencer(None)
+                        .and_then(|sequencer| Ingester::increment_sequencer(Some(sequencer)))?;
+                    event.0.sequencer = Some(new_sequencer);
+                }
+                Ok(event)
+            })
+            .collect::<Result<HashSet<_>>>()?;
+
+        // Return remaining objects back to the database state for delete comparison.
+        database_state.extend(null_sequencer);
 
         // The state in S3 minus the state in the database represents new records that should be
         // inserted.

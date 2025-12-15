@@ -55,6 +55,7 @@ impl From<ObjectVersion> for FlatS3EventMessage {
             size,
             restore_status,
             version_id,
+            is_latest,
             ..
         } = object;
 
@@ -80,7 +81,7 @@ impl From<ObjectVersion> for FlatS3EventMessage {
             sha256: None,
             // A crawl record is a created event
             event_type: EventType::Created,
-            is_current_state: true,
+            is_current_state: is_latest.unwrap_or(true),
             is_delete_marker: false,
             reason,
             archive_status: None,
@@ -136,7 +137,7 @@ pub(crate) mod tests {
         let client = database::Client::from_pool(pool);
         let config = Config::default();
         let mut collecter = test_collecter(&config, &client).await;
-        collecter.set_client(crawl_expectations());
+        collecter.set_client(crawl_expectations(vec![default_version_id()]));
         collecter.set_crawl_bucket("bucket".to_string());
 
         let result = Crawl::new(collecter.client().clone())
@@ -181,7 +182,14 @@ pub(crate) mod tests {
             .with_is_current_state(true)
             .with_sha256(Some(EXPECTED_SHA256.to_string()));
         assert_eq!(results.len(), 2);
-        assert_eq_crawl_event(results[0].clone(), event.with_reason(Reason::Crawl));
+        assert_eq_crawl_event(
+            results[0].clone(),
+            event
+                .with_sequencer(Some(
+                    "000000000000000000000000000000-0100000000000000".to_string(),
+                ))
+                .with_reason(Reason::Crawl),
+        );
         assert_eq_crawl_event(results[1].clone(), expected_unaffected_record_two());
     }
 
@@ -202,9 +210,9 @@ pub(crate) mod tests {
             .with_size(Some(1))
             .with_is_current_state(true)
             .with_sha256(Some(EXPECTED_SHA256.to_string()));
-        let results = ingest_crawl(client.clone(), event.clone()).await;
+        let results = ingest_crawl(client.clone(), event.clone(), vec![default_version_id()]).await;
         assert_eq!(results.len(), 2);
-        assert_eq_crawl_event(results[0].clone(), event);
+        assert_eq_crawl_event(results[0].clone(), event.clone());
         assert_eq_crawl_event(results[1].clone(), expected_unaffected_record_two());
 
         let event = FlatS3EventMessage::new_with_generated_id()
@@ -221,7 +229,7 @@ pub(crate) mod tests {
             .with_is_current_state(true)
             .with_sha256(Some(EXPECTED_SHA256.to_string()))
             .with_reason(Reason::CreatedCopy);
-        let results = ingest_crawl(client.clone(), event.clone()).await;
+        let results = ingest_crawl(client.clone(), event.clone(), vec![default_version_id()]).await;
         assert_eq!(results.len(), 2);
         assert_eq_crawl_event(results[0].clone(), event);
         assert_eq_crawl_event(results[1].clone(), expected_unaffected_record_two());
@@ -241,7 +249,7 @@ pub(crate) mod tests {
             .with_sha256(Some(EXPECTED_SHA256.to_string()))
             .with_event_time(Some("1970-01-01 00:00:00.000000 +00:00".parse().unwrap()));
 
-        let results = ingest_crawl(client.clone(), event.clone()).await;
+        let results = ingest_crawl(client.clone(), event.clone(), vec![default_version_id()]).await;
         assert_eq!(results.len(), 2);
         assert_eq_crawl_event(results[0].clone(), event);
         assert_eq_crawl_event(results[1].clone(), expected_unaffected_record_two());
@@ -264,7 +272,7 @@ pub(crate) mod tests {
             .with_size(Some(1))
             .with_is_current_state(true)
             .with_sha256(Some(EXPECTED_SHA256.to_string()));
-        let results = ingest_crawl(client.clone(), event.clone()).await;
+        let results = ingest_crawl(client.clone(), event.clone(), vec![default_version_id()]).await;
         assert_eq!(results.len(), 3);
         assert_eq!(results[0], event.clone().with_is_current_state(false));
         assert_eq_crawl_event(
@@ -291,7 +299,7 @@ pub(crate) mod tests {
             .with_size(Some(1))
             .with_is_current_state(true)
             .with_sha256(Some(EXPECTED_SHA256.to_string()));
-        let results = ingest_crawl(client.clone(), event.clone()).await;
+        let results = ingest_crawl(client.clone(), event.clone(), vec![default_version_id()]).await;
         assert_eq!(results.len(), 3);
         assert_eq!(results[0], event.clone().with_is_current_state(false));
         assert_eq_crawl_event(
@@ -318,7 +326,7 @@ pub(crate) mod tests {
             .with_size(Some(1))
             .with_is_current_state(true)
             .with_sha256(Some(EXPECTED_SHA256.to_string()));
-        let results = ingest_crawl(client.clone(), event.clone()).await;
+        let results = ingest_crawl(client.clone(), event.clone(), vec![default_version_id()]).await;
         assert_eq!(results.len(), 3);
         assert_eq!(results[0], event.clone().with_is_current_state(false));
         assert_eq_crawl_event(
@@ -345,7 +353,7 @@ pub(crate) mod tests {
             .with_size(Some(1))
             .with_is_current_state(true)
             .with_sha256(Some(EXPECTED_SHA256.to_string()));
-        let results = ingest_crawl(client.clone(), event.clone()).await;
+        let results = ingest_crawl(client.clone(), event.clone(), vec![default_version_id()]).await;
         assert_eq!(results.len(), 3);
         assert_eq!(results[0], event.clone().with_is_current_state(false));
         assert_eq_crawl_event(
@@ -372,7 +380,7 @@ pub(crate) mod tests {
             .with_size(Some(1))
             .with_is_current_state(true)
             .with_sha256(Some(EXPECTED_SHA256.to_string()));
-        let results = ingest_crawl(client.clone(), event.clone()).await;
+        let results = ingest_crawl(client.clone(), event.clone(), vec![default_version_id()]).await;
         assert_eq!(results.len(), 3);
         assert_eq!(results[0], event.clone().with_is_current_state(false));
         assert_eq_crawl_event(
@@ -399,7 +407,7 @@ pub(crate) mod tests {
             .with_size(None)
             .with_is_current_state(true)
             .with_sha256(Some(EXPECTED_SHA256.to_string()));
-        let results = ingest_crawl(client.clone(), event.clone()).await;
+        let results = ingest_crawl(client.clone(), event.clone(), vec![default_version_id()]).await;
         assert_eq!(results.len(), 3);
         assert_eq!(results[0], event.clone().with_is_current_state(false));
         assert_eq_crawl_event(
@@ -426,7 +434,7 @@ pub(crate) mod tests {
             .with_size(Some(1))
             .with_is_current_state(true)
             .with_sha256(None);
-        let results = ingest_crawl(client.clone(), event.clone()).await;
+        let results = ingest_crawl(client.clone(), event.clone(), vec![default_version_id()]).await;
         assert_eq!(results.len(), 3);
         assert_eq!(results[0], event.clone().with_is_current_state(false));
         assert_eq_crawl_event(
@@ -455,7 +463,7 @@ pub(crate) mod tests {
             .with_is_current_state(true)
             .with_sha256(Some(EXPECTED_SHA256.to_string()))
             .with_attributes(Some(json!({ "attribute": "1" })));
-        let results = ingest_crawl(client.clone(), event.clone()).await;
+        let results = ingest_crawl(client.clone(), event.clone(), vec![default_version_id()]).await;
         assert_eq!(results.len(), 2);
         assert_eq!(results[0], event.clone());
         assert_eq_crawl_event(
@@ -486,7 +494,7 @@ pub(crate) mod tests {
             .with_size(Some(1))
             .with_is_current_state(true)
             .with_sha256(Some(EXPECTED_SHA256.to_string()));
-        let results = ingest_crawl(client.clone(), event.clone()).await;
+        let results = ingest_crawl(client.clone(), event.clone(), vec![default_version_id()]).await;
         assert_eq!(results.len(), 4);
         assert_eq!(results[0], event.clone().with_is_current_state(false));
 
@@ -512,7 +520,7 @@ pub(crate) mod tests {
     }
 
     #[sqlx::test(migrator = "MIGRATOR")]
-    async fn crawl_messages_existing_entry_null_sequencer(pool: PgPool) {
+    async fn crawl_messages_existing_entry_null_sequencer_version_id(pool: PgPool) {
         let client = database::Client::from_pool(pool);
 
         // Mimic old database logic by ingesting a null sequencer directly.
@@ -528,6 +536,133 @@ pub(crate) mod tests {
             e_tag: Set(Some(EXPECTED_QUOTED_E_TAG.to_string())),
             last_modified_date: Set(Some("1970-01-01 00:00:00.000000 +00:00".parse().unwrap())),
             version_id: Set("old_version_id".to_string()),
+            size: Set(Some(1)),
+            is_current_state: Set(false),
+            sha256: Set(Some(EXPECTED_SHA256.to_string())),
+            ..Default::default()
+        };
+        Entity::insert(event)
+            .exec(client.connection_ref())
+            .await
+            .unwrap();
+        let event = ActiveModel {
+            s3_object_id: Set(UuidGenerator::generate()),
+            event_type: Set(sea_orm_active_enums::EventType::Created),
+            key: Set("key".to_string()),
+            bucket: Set("bucket".to_string()),
+            sequencer: NotSet,
+            storage_class: Set(Some(sea_orm_active_enums::StorageClass::IntelligentTiering)),
+            ingest_id: Set(Some(Uuid::default())),
+            archive_status: Set(Some(ArchiveStatus::DeepArchiveAccess)),
+            e_tag: Set(Some(EXPECTED_QUOTED_E_TAG.to_string())),
+            last_modified_date: Set(Some("1970-01-01 00:00:00.000000 +00:00".parse().unwrap())),
+            version_id: Set(default_version_id()),
+            size: Set(Some(1)),
+            is_current_state: Set(true),
+            sha256: Set(Some(EXPECTED_SHA256.to_string())),
+            ..Default::default()
+        };
+        Entity::insert(event)
+            .exec(client.connection_ref())
+            .await
+            .unwrap();
+
+        let config = Config::default();
+        let mut collecter = test_collecter(&config, &client).await;
+        collecter.set_client(crawl_expectations(vec![default_version_id()]));
+        collecter.set_crawl_bucket("bucket".to_string());
+
+        let result = Crawl::new(collecter.client().clone())
+            .crawl_s3("bucket", None)
+            .await
+            .unwrap()
+            .into_inner();
+
+        collecter.set_raw_events(FlatS3EventMessages(result));
+        let result = collecter.collect().await.unwrap();
+        client.ingest(result.event_type).await.unwrap();
+
+        let event = FlatS3EventMessage::new_with_generated_id()
+            .with_key("key".to_string())
+            .with_bucket("bucket".to_string())
+            .with_sequencer(Some(
+                "000000000000000000000000000000-0100000000000000".to_string(),
+            ))
+            .with_storage_class(Some(IntelligentTiering))
+            .with_ingest_id(Some(Uuid::default()))
+            .with_archive_status(Some(ArchiveStatus::DeepArchiveAccess))
+            .with_e_tag(Some(EXPECTED_QUOTED_E_TAG.to_string()))
+            .with_last_modified_date(Some("1970-01-01 00:00:00.000000 +00:00".parse().unwrap()))
+            .with_version_id(default_version_id())
+            .with_size(Some(1))
+            .with_is_current_state(true)
+            .with_sha256(Some(EXPECTED_SHA256.to_string()));
+
+        let results = fetch_results(&client).await;
+        assert_eq!(results.len(), 5);
+        assert_eq_crawl_event(
+            results[0].clone(),
+            event
+                .clone()
+                .with_version_id("old_version_id".to_string())
+                .with_reason(Reason::Crawl)
+                .with_event_type(EventType::Deleted)
+                .with_is_current_state(false),
+        );
+        assert_eq_crawl_event(
+            results[1].clone(),
+            event
+                .clone()
+                .with_key("key1".to_string())
+                .with_size(Some(2))
+                .with_reason(Reason::Crawl)
+                .with_sequencer(Some(
+                    "000000000000000000000000000000-0100000000000000".to_string(),
+                )),
+        );
+        assert_eq_crawl_event(
+            results[2].clone(),
+            event
+                .clone()
+                .with_reason(Reason::Crawl)
+                .with_sequencer(Some(
+                    "000000000000000000000000000000-0200000000000000".to_string(),
+                )),
+        );
+        assert_eq_crawl_event(
+            results[3].clone(),
+            event
+                .clone()
+                .with_sequencer(None)
+                .with_is_current_state(false),
+        );
+        assert_eq_crawl_event(
+            results[4].clone(),
+            event
+                .clone()
+                .with_version_id("old_version_id".to_string())
+                .with_sequencer(None)
+                .with_is_current_state(false),
+        );
+    }
+
+    #[sqlx::test(migrator = "MIGRATOR")]
+    async fn crawl_messages_existing_entry_null_sequencer(pool: PgPool) {
+        let client = database::Client::from_pool(pool);
+
+        // Mimic old database logic by ingesting a null sequencer directly.
+        let event = ActiveModel {
+            s3_object_id: Set(UuidGenerator::generate()),
+            event_type: Set(sea_orm_active_enums::EventType::Created),
+            key: Set("key2".to_string()),
+            bucket: Set("bucket".to_string()),
+            sequencer: NotSet,
+            storage_class: Set(Some(sea_orm_active_enums::StorageClass::IntelligentTiering)),
+            ingest_id: Set(Some(Uuid::default())),
+            archive_status: Set(Some(ArchiveStatus::DeepArchiveAccess)),
+            e_tag: Set(Some(EXPECTED_QUOTED_E_TAG.to_string())),
+            last_modified_date: Set(Some("1970-01-01 00:00:00.000000 +00:00".parse().unwrap())),
+            version_id: Set(default_version_id()),
             size: Set(Some(1)),
             is_current_state: Set(true),
             sha256: Set(Some(EXPECTED_SHA256.to_string())),
@@ -561,7 +696,7 @@ pub(crate) mod tests {
 
         let config = Config::default();
         let mut collecter = test_collecter(&config, &client).await;
-        collecter.set_client(crawl_expectations());
+        collecter.set_client(crawl_expectations(vec![default_version_id()]));
         collecter.set_crawl_bucket("bucket".to_string());
 
         let result = Crawl::new(collecter.client().clone())
@@ -591,19 +726,50 @@ pub(crate) mod tests {
             .with_sha256(Some(EXPECTED_SHA256.to_string()));
 
         let results = fetch_results(&client).await;
-        assert_eq!(results.len(), 3);
-        assert_eq_crawl_event(results[0].clone(), event.clone().with_reason(Reason::Crawl));
+        assert_eq!(results.len(), 5);
         assert_eq_crawl_event(
-            results[1].clone(),
+            results[0].clone(),
             event
                 .clone()
                 .with_key("key1".to_string())
                 .with_size(Some(2))
-                .with_reason(Reason::Crawl),
+                .with_reason(Reason::Crawl)
+                .with_sequencer(Some(
+                    "000000000000000000000000000000-0100000000000000".to_string(),
+                )),
+        );
+        assert_eq_crawl_event(
+            results[1].clone(),
+            event
+                .clone()
+                .with_key("key2".to_string())
+                .with_reason(Reason::Crawl)
+                .with_event_type(EventType::Deleted)
+                .with_is_current_state(false),
         );
         assert_eq_crawl_event(
             results[2].clone(),
-            event.with_sequencer(None).with_is_current_state(false),
+            event
+                .clone()
+                .with_reason(Reason::Crawl)
+                .with_sequencer(Some(
+                    "000000000000000000000000000000-0200000000000000".to_string(),
+                )),
+        );
+        assert_eq_crawl_event(
+            results[3].clone(),
+            event
+                .clone()
+                .with_sequencer(None)
+                .with_is_current_state(false),
+        );
+        assert_eq_crawl_event(
+            results[4].clone(),
+            event
+                .clone()
+                .with_key("key2".to_string())
+                .with_sequencer(None)
+                .with_is_current_state(false),
         );
     }
 
@@ -751,6 +917,7 @@ pub(crate) mod tests {
     async fn ingest_crawl(
         client: database::Client,
         event: FlatS3EventMessage,
+        version_ids: Vec<String>,
     ) -> Vec<FlatS3EventMessage> {
         client
             .ingest(EventSourceType::S3(TransposedS3EventMessages::from(
@@ -761,7 +928,7 @@ pub(crate) mod tests {
 
         let config = Config::default();
         let mut collecter = test_collecter(&config, &client).await;
-        collecter.set_client(crawl_expectations());
+        collecter.set_client(crawl_expectations(version_ids));
         collecter.set_crawl_bucket("bucket".to_string());
 
         let result = Crawl::new(collecter.client().clone())
@@ -875,7 +1042,7 @@ pub(crate) mod tests {
         .collect::<Vec<_>>()
     }
 
-    pub(crate) fn list_object_expectations(rules: &[Rule]) -> Client {
+    pub(crate) fn list_object_expectations(rules: &[Rule], version_ids: Vec<String>) -> Client {
         Client::new(mock_client!(
             aws_sdk_s3,
             RuleMode::MatchAny,
@@ -883,24 +1050,30 @@ pub(crate) mod tests {
                 &[mock!(aws_sdk_s3::Client::list_object_versions)
                     .match_requests(|req| req.bucket() == Some("bucket") && req.prefix().is_none())
                     .then_output(move || {
-                        ListObjectVersionsOutput::builder()
-                            .versions(
-                                ObjectVersion::builder()
-                                    .key("key")
-                                    .size(1)
-                                    .is_latest(true)
-                                    .e_tag(EXPECTED_QUOTED_E_TAG)
-                                    .build(),
-                            )
-                            .versions(
-                                ObjectVersion::builder()
-                                    .key("key1")
-                                    .size(2)
-                                    .is_latest(true)
-                                    .e_tag(EXPECTED_QUOTED_E_TAG)
-                                    .build(),
-                            )
-                            .build()
+                        let mut builder = ListObjectVersionsOutput::builder();
+                        for (i, version_id) in version_ids.clone().into_iter().enumerate() {
+                            builder = builder
+                                .versions(
+                                    ObjectVersion::builder()
+                                        .key("key")
+                                        .version_id(version_id.clone())
+                                        .size(1)
+                                        .is_latest(i == 0)
+                                        .e_tag(EXPECTED_QUOTED_E_TAG)
+                                        .build(),
+                                )
+                                .versions(
+                                    ObjectVersion::builder()
+                                        .key("key1")
+                                        .version_id(version_id.clone())
+                                        .size(2)
+                                        .is_latest(i == 0)
+                                        .e_tag(EXPECTED_QUOTED_E_TAG)
+                                        .build(),
+                                );
+                        }
+
+                        builder.build()
                     }),],
                 rules
             ]

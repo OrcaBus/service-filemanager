@@ -365,12 +365,13 @@ pub(crate) mod tests {
     use crate::queries::list::tests::assert_crawl_entries;
     use crate::routes::list::tests::{response_from, response_from_get};
     use crate::routes::pagination::Links;
+    use itertools::Itertools;
     use serde_json::json;
     use std::sync::Arc;
 
     #[sqlx::test(migrator = "MIGRATOR")]
     async fn crawl_s3_api(pool: PgPool) {
-        let client = crawl_expectations();
+        let client = crawl_expectations(vec![default_version_id()]);
 
         let state = AppState::new(
             database::Client::from_pool(pool),
@@ -467,38 +468,45 @@ pub(crate) mod tests {
         .await
     }
 
-    pub(crate) fn crawl_expectations() -> Client {
-        list_object_expectations(&[
-            head_expectation(
-                "key".to_string(),
-                default_version_id().to_string(),
-                expected_head_object(),
-            ),
-            put_tagging_expectation(
-                "key".to_string(),
-                default_version_id().to_string(),
-                expected_put_object_tagging(),
-            ),
-            get_tagging_expectation(
-                "key".to_string(),
-                default_version_id().to_string(),
-                expected_get_object_tagging(Some(Uuid::default())),
-            ),
-            head_expectation(
-                "key1".to_string(),
-                default_version_id().to_string(),
-                expected_head_object(),
-            ),
-            put_tagging_expectation(
-                "key1".to_string(),
-                default_version_id().to_string(),
-                expected_put_object_tagging(),
-            ),
-            get_tagging_expectation(
-                "key1".to_string(),
-                default_version_id().to_string(),
-                expected_get_object_tagging(Some(Uuid::default())),
-            ),
-        ])
+    pub(crate) fn crawl_expectations(version_ids: Vec<String>) -> Client {
+        let expectations = version_ids
+            .iter()
+            .flat_map(|version_id| {
+                vec![
+                    head_expectation(
+                        "key".to_string(),
+                        version_id.to_string(),
+                        expected_head_object(),
+                    ),
+                    put_tagging_expectation(
+                        "key".to_string(),
+                        version_id.to_string(),
+                        expected_put_object_tagging(),
+                    ),
+                    get_tagging_expectation(
+                        "key".to_string(),
+                        version_id.to_string(),
+                        expected_get_object_tagging(Some(Uuid::default())),
+                    ),
+                    head_expectation(
+                        "key1".to_string(),
+                        version_id.to_string(),
+                        expected_head_object(),
+                    ),
+                    put_tagging_expectation(
+                        "key1".to_string(),
+                        version_id.to_string(),
+                        expected_put_object_tagging(),
+                    ),
+                    get_tagging_expectation(
+                        "key1".to_string(),
+                        version_id.to_string(),
+                        expected_get_object_tagging(Some(Uuid::default())),
+                    ),
+                ]
+            })
+            .collect_vec();
+
+        list_object_expectations(expectations.as_slice(), version_ids)
     }
 }

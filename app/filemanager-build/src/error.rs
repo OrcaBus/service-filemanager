@@ -1,3 +1,5 @@
+#![allow(unused_assignments)]
+
 //! This module contains the crate's error types.
 //!
 
@@ -6,7 +8,7 @@ use std::fs::read_to_string;
 use std::panic::Location;
 use std::{fmt, io, result};
 
-use miette::{Diagnostic, NamedSource, SourceOffset, diagnostic};
+use miette::{Diagnostic, NamedSource, SourceOffset};
 use thiserror::Error;
 
 use crate::error::ErrorKind::IoError;

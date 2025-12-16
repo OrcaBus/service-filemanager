@@ -130,9 +130,9 @@ pub async fn crawl_sync_s3(
     state: State<AppState>,
     WithRejection(extract::Json(crawl), _): Json<CrawlRequest>,
 ) -> Result<extract::Json<Crawl>> {
-    let conn = state.database_client().connection_ref();
+    let conn = state.database_client().connection_ref().begin().await?;
 
-    let in_progress = ListQueryBuilder::<_, s3_crawl::Entity>::new(conn)
+    let in_progress = ListQueryBuilder::<_, s3_crawl::Entity>::new(&conn)
         .filter_all(
             S3CrawlFilter {
                 bucket: Wildcard::new(crawl.bucket.to_string()).into(),
@@ -151,7 +151,7 @@ pub async fn crawl_sync_s3(
         if diff < TimeDelta::zero() || diff > TimeDelta::minutes(MAX_CRAWL_TIME_MINUTES) {
             let mut to_update = in_progress.into_active_model();
             to_update.status = Set(CrawlStatus::Failed);
-            to_update.update(conn).await?;
+            to_update.update(&conn).await?;
         } else {
             return Err(CrawlError(format!(
                 "another crawl on {} is already in progress",
@@ -169,30 +169,33 @@ pub async fn crawl_sync_s3(
         status: Set(InProgress),
         ..Default::default()
     };
-    crawl_execution.clone().insert(conn).await?;
+    crawl_execution.clone().insert(&conn).await?;
 
     let now = Utc::now();
     let set_failed = |mut to_update: s3_crawl::ActiveModel| async {
         to_update.status = Set(CrawlStatus::Failed);
-        Ok::<_, Error>(to_update.update(conn).await?)
+        Ok::<_, Error>(to_update.update(&conn).await?)
     };
 
-    // Get crawl list object details.
-    let crawl = crawl::Crawl::new(state.s3_client().clone())
-        .crawl_s3(&crawl.bucket, crawl.prefix)
+    // Get crawl list object details ensuring that the current database state is taken into account.
+    let crawl_result = crawl::Crawl::new(state.s3_client().clone())
+        .crawl_s3(&crawl.bucket, crawl.prefix.clone())
         .await;
-    if let Err(err) = crawl {
+
+    if let Err(err) = crawl_result {
         set_failed(crawl_execution).await?;
         return Err(err);
     }
 
-    let crawl = crawl?;
-    let n_events = i64::try_from(crawl.0.len())?;
+    let crawl_result = crawl_result?;
+    let n_events = i64::try_from(crawl_result.0.len())?;
 
     // Update events.
     let events = CollecterBuilder::default()
+        .with_crawl_bucket(crawl.bucket)
+        .with_crawl_prefix(crawl.prefix)
         .with_s3_client(state.s3_client().clone())
-        .build(crawl, state.config(), state.database_client())
+        .build(crawl_result, state.config(), state.database_client())
         .await
         .collect()
         .await;
@@ -215,12 +218,14 @@ pub async fn crawl_sync_s3(
         now.signed_duration_since(Utc::now()).abs().num_seconds(),
     )?));
     crawl_execution.n_objects = Set(Some(n_events));
-    crawl_execution.clone().update(conn).await?;
+    crawl_execution.clone().update(&conn).await?;
 
     let entry = s3_crawl::Entity::find_by_id(uuid)
-        .one(conn)
+        .one(&conn)
         .await?
         .ok_or_else(|| CrawlError("expected crawl entry".to_string()))?;
+    conn.commit().await?;
+
     Ok(extract::Json(entry))
 }
 
@@ -360,12 +365,13 @@ pub(crate) mod tests {
     use crate::queries::list::tests::assert_crawl_entries;
     use crate::routes::list::tests::{response_from, response_from_get};
     use crate::routes::pagination::Links;
+    use itertools::Itertools;
     use serde_json::json;
     use std::sync::Arc;
 
     #[sqlx::test(migrator = "MIGRATOR")]
     async fn crawl_s3_api(pool: PgPool) {
-        let client = crawl_expectations();
+        let client = crawl_expectations(vec![default_version_id()]);
 
         let state = AppState::new(
             database::Client::from_pool(pool),
@@ -386,7 +392,7 @@ pub(crate) mod tests {
             state.clone(),
             "/s3/crawl/sync",
             Method::POST,
-            Body::from(json!({"bucket": "bucket", "prefix": "prefix"}).to_string()),
+            Body::from(json!({"bucket": "bucket"}).to_string()),
         )
         .await
         .1;
@@ -397,10 +403,6 @@ pub(crate) mod tests {
         let (status, _) = crawl(&state).await;
 
         assert_eq!(status, StatusCode::NO_CONTENT);
-        // let result = state.into_crawl_result().await.unwrap();
-        //
-        // assert_eq!(result.status, Completed);
-        // assert_eq!(result.n_objects, Some(2));
     }
 
     #[sqlx::test(migrator = "MIGRATOR")]
@@ -461,22 +463,50 @@ pub(crate) mod tests {
             state.clone(),
             "/s3/crawl",
             Method::POST,
-            Body::from(json!({"bucket": "bucket", "prefix": "prefix"}).to_string()),
+            Body::from(json!({"bucket": "bucket"}).to_string()),
         )
         .await
     }
 
-    fn crawl_expectations() -> Client {
-        list_object_expectations(&[
-            head_expectation(default_version_id().to_string(), expected_head_object()),
-            put_tagging_expectation(
-                default_version_id().to_string(),
-                expected_put_object_tagging(),
-            ),
-            get_tagging_expectation(
-                default_version_id().to_string(),
-                expected_get_object_tagging(),
-            ),
-        ])
+    pub(crate) fn crawl_expectations(version_ids: Vec<String>) -> Client {
+        let expectations = version_ids
+            .iter()
+            .flat_map(|version_id| {
+                vec![
+                    head_expectation(
+                        "key".to_string(),
+                        version_id.to_string(),
+                        expected_head_object(),
+                    ),
+                    put_tagging_expectation(
+                        "key".to_string(),
+                        version_id.to_string(),
+                        expected_put_object_tagging(),
+                    ),
+                    get_tagging_expectation(
+                        "key".to_string(),
+                        version_id.to_string(),
+                        expected_get_object_tagging(Some(Uuid::default())),
+                    ),
+                    head_expectation(
+                        "key1".to_string(),
+                        version_id.to_string(),
+                        expected_head_object(),
+                    ),
+                    put_tagging_expectation(
+                        "key1".to_string(),
+                        version_id.to_string(),
+                        expected_put_object_tagging(),
+                    ),
+                    get_tagging_expectation(
+                        "key1".to_string(),
+                        version_id.to_string(),
+                        expected_get_object_tagging(Some(Uuid::default())),
+                    ),
+                ]
+            })
+            .collect_vec();
+
+        list_object_expectations(expectations.as_slice(), version_ids)
     }
 }

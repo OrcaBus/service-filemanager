@@ -25,7 +25,7 @@ pub async fn generate_entities(
         "--with-serde",
         "both",
         "--enum-extra-derives",
-        "strum::FromRepr, strum::EnumCount, sqlx::Decode, sqlx::Encode",
+        "strum::FromRepr, strum::EnumCount, sqlx::Decode, sqlx::Encode, Hash",
         "--model-extra-derives",
         "utoipa::ToSchema",
         "--model-extra-attributes",

@@ -1,4 +1,4 @@
--- Resets the `is_current_state` to false for a set of objects based on the `bucket` amd `key`. The current state of
+-- Resets the `is_current_state` to false for a set of objects based on the `bucket` and `key`. The current state of
 -- an object is the one that represents what S3 sees when fetching a key. I.e. it's the most current version of an
 -- object that hasn't been permanently deleted, and is not a delete marker.
 
@@ -36,7 +36,7 @@ current_versions as (
 ),
 -- This selects the single event that is the current state for the key, i.e. the record that represents the current
 -- version of all versioned objects. To do this, the query partitions over current versions of objects from the previous
--- query and selects the latest. Delete markers are treated specially because they should always non-current state.
+-- query and selects the latest. Delete markers are treated specially because they should always be non-current state.
 current_state as (
     select
         s3_object_id,

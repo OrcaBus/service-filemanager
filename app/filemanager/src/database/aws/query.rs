@@ -64,8 +64,9 @@ impl Query {
         keys: Vec<String>,
     ) -> Result<()> {
         // Remove duplicate combinations of (bucket, key) as it's unnecessary to call multiple times.
-        let keys: HashSet<_> = HashSet::from_iter(buckets.into_iter().zip(keys.into_iter()));
-        let (buckets, keys): (Vec<_>, Vec<_>) = keys.into_iter().unzip();
+        let bucket_key_pairs: HashSet<_> =
+            HashSet::from_iter(buckets.into_iter().zip(keys.into_iter()));
+        let (buckets, keys): (Vec<_>, Vec<_>) = bucket_key_pairs.into_iter().unzip();
 
         let conn = conn.acquire().await?;
 

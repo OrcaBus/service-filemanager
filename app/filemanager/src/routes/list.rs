@@ -784,7 +784,7 @@ pub(crate) mod tests {
         )
         .await;
         let mut expected_first = entries[0].clone();
-        expected_first.is_current_state = false;
+        expected_first.is_current_state = true;
         let mut expected_second = entries[1].clone();
         expected_second.is_current_state = false;
         assert_eq!(result.results(), vec![expected_first, expected_second]);

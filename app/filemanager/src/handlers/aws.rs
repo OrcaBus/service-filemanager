@@ -219,7 +219,8 @@ pub(crate) mod tests {
 
     use super::*;
     use crate::database::aws::ingester::tests::{
-        assert_row, expected_message, fetch_results, remove_version_ids, test_events, test_ingester,
+        assert_row, expected_message, fetch_results_ordered, remove_version_ids, test_events,
+        test_ingester,
     };
     use crate::database::aws::migration::tests::MIGRATOR;
     use crate::database::entities::sea_orm_active_enums::{ArchiveStatus, Reason};
@@ -271,13 +272,13 @@ pub(crate) mod tests {
         .await
         .unwrap();
 
-        let s3_object_results = fetch_results(&ingester).await;
+        let s3_object_results = fetch_results_ordered(&ingester).await;
 
         assert_eq!(s3_object_results.len(), 2);
         let message = expected_message(Some(0), EXPECTED_VERSION_ID.to_string(), false, Created)
             .with_archive_status(Some(ArchiveStatus::DeepArchiveAccess));
         assert_row(
-            &s3_object_results[1],
+            &s3_object_results[0],
             message,
             Some(EXPECTED_SEQUENCER_CREATED_ONE.to_string()),
             Some(Default::default()),
@@ -287,7 +288,7 @@ pub(crate) mod tests {
             .with_sha256(None)
             .with_last_modified_date(None);
         assert_row(
-            &s3_object_results[0],
+            &s3_object_results[1],
             message,
             Some(EXPECTED_SEQUENCER_DELETED_ONE.to_string()),
             Some(Default::default()),
@@ -388,14 +389,14 @@ pub(crate) mod tests {
 
         f(sqs_client, s3_client).await;
 
-        let s3_object_results = fetch_results(client).await;
+        let s3_object_results = fetch_results_ordered(client).await;
 
         assert_eq!(s3_object_results.len(), 2);
         let message = expected_message(Some(0), EXPECTED_VERSION_ID.to_string(), false, Created)
             .with_is_current_state(false)
             .with_archive_status(Some(ArchiveStatus::DeepArchiveAccess));
         assert_row(
-            &s3_object_results[1],
+            &s3_object_results[0],
             message,
             Some(EXPECTED_SEQUENCER_CREATED_ONE.to_string()),
             Some(Default::default()),
@@ -406,7 +407,7 @@ pub(crate) mod tests {
             .with_last_modified_date(None)
             .with_is_current_state(false);
         assert_row(
-            &s3_object_results[0],
+            &s3_object_results[1],
             message,
             Some(EXPECTED_SEQUENCER_DELETED_ONE.to_string()),
             Some(Default::default()),

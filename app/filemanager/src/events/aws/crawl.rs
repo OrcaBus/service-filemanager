@@ -182,7 +182,7 @@ pub(crate) mod tests {
             .with_is_current_state(true)
             .with_sha256(Some(EXPECTED_SHA256.to_string()));
         assert_eq!(results.len(), 2);
-        assert_eq_crawl_event(
+        assert_eq_event(
             results[0].clone(),
             event
                 .with_sequencer(Some(
@@ -190,7 +190,7 @@ pub(crate) mod tests {
                 ))
                 .with_reason(Reason::Crawl),
         );
-        assert_eq_crawl_event(results[1].clone(), expected_unaffected_record_two());
+        assert_eq_event(results[1].clone(), expected_unaffected_record_two());
     }
 
     #[sqlx::test(migrator = "MIGRATOR")]
@@ -212,8 +212,8 @@ pub(crate) mod tests {
             .with_sha256(Some(EXPECTED_SHA256.to_string()));
         let results = ingest_crawl(client.clone(), event.clone(), vec![default_version_id()]).await;
         assert_eq!(results.len(), 2);
-        assert_eq_crawl_event(results[0].clone(), event.clone());
-        assert_eq_crawl_event(results[1].clone(), expected_unaffected_record_two());
+        assert_eq_event(results[0].clone(), event.clone());
+        assert_eq_event(results[1].clone(), expected_unaffected_record_two());
 
         let event = FlatS3EventMessage::new_with_generated_id()
             .with_key("key".to_string())
@@ -231,8 +231,8 @@ pub(crate) mod tests {
             .with_reason(Reason::CreatedCopy);
         let results = ingest_crawl(client.clone(), event.clone(), vec![default_version_id()]).await;
         assert_eq!(results.len(), 2);
-        assert_eq_crawl_event(results[0].clone(), event);
-        assert_eq_crawl_event(results[1].clone(), expected_unaffected_record_two());
+        assert_eq_event(results[0].clone(), event);
+        assert_eq_event(results[1].clone(), expected_unaffected_record_two());
 
         let event = FlatS3EventMessage::new_with_generated_id()
             .with_key("key".to_string())
@@ -251,8 +251,8 @@ pub(crate) mod tests {
 
         let results = ingest_crawl(client.clone(), event.clone(), vec![default_version_id()]).await;
         assert_eq!(results.len(), 2);
-        assert_eq_crawl_event(results[0].clone(), event);
-        assert_eq_crawl_event(results[1].clone(), expected_unaffected_record_two());
+        assert_eq_event(results[0].clone(), event);
+        assert_eq_event(results[1].clone(), expected_unaffected_record_two());
     }
 
     #[sqlx::test(migrator = "MIGRATOR")]
@@ -275,7 +275,7 @@ pub(crate) mod tests {
         let results = ingest_crawl(client.clone(), event.clone(), vec![default_version_id()]).await;
         assert_eq!(results.len(), 3);
         assert_eq!(results[0], event.clone().with_is_current_state(false));
-        assert_eq_crawl_event(
+        assert_eq_event(
             results[1].clone(),
             event
                 .with_sequencer(Some(
@@ -284,7 +284,7 @@ pub(crate) mod tests {
                 .with_reason(Reason::Crawl)
                 .with_storage_class(Some(StorageClass::IntelligentTiering)),
         );
-        assert_eq_crawl_event(results[2].clone(), expected_unaffected_record_two());
+        assert_eq_event(results[2].clone(), expected_unaffected_record_two());
 
         let event = FlatS3EventMessage::new_with_generated_id()
             .with_key("key".to_string())
@@ -302,7 +302,7 @@ pub(crate) mod tests {
         let results = ingest_crawl(client.clone(), event.clone(), vec![default_version_id()]).await;
         assert_eq!(results.len(), 3);
         assert_eq!(results[0], event.clone().with_is_current_state(false));
-        assert_eq_crawl_event(
+        assert_eq_event(
             results[1].clone(),
             event
                 .with_sequencer(Some(
@@ -311,7 +311,7 @@ pub(crate) mod tests {
                 .with_reason(Reason::Crawl)
                 .with_ingest_id(Some(Uuid::default())),
         );
-        assert_eq_crawl_event(results[2].clone(), expected_unaffected_record_two());
+        assert_eq_event(results[2].clone(), expected_unaffected_record_two());
 
         let event = FlatS3EventMessage::new_with_generated_id()
             .with_key("key".to_string())
@@ -329,7 +329,7 @@ pub(crate) mod tests {
         let results = ingest_crawl(client.clone(), event.clone(), vec![default_version_id()]).await;
         assert_eq!(results.len(), 3);
         assert_eq!(results[0], event.clone().with_is_current_state(false));
-        assert_eq_crawl_event(
+        assert_eq_event(
             results[1].clone(),
             event
                 .with_sequencer(Some(
@@ -338,7 +338,7 @@ pub(crate) mod tests {
                 .with_reason(Reason::Crawl)
                 .with_archive_status(Some(ArchiveStatus::DeepArchiveAccess)),
         );
-        assert_eq_crawl_event(results[2].clone(), expected_unaffected_record_two());
+        assert_eq_event(results[2].clone(), expected_unaffected_record_two());
 
         let event = FlatS3EventMessage::new_with_generated_id()
             .with_key("key".to_string())
@@ -356,7 +356,7 @@ pub(crate) mod tests {
         let results = ingest_crawl(client.clone(), event.clone(), vec![default_version_id()]).await;
         assert_eq!(results.len(), 3);
         assert_eq!(results[0], event.clone().with_is_current_state(false));
-        assert_eq_crawl_event(
+        assert_eq_event(
             results[1].clone(),
             event
                 .with_sequencer(Some(
@@ -365,7 +365,7 @@ pub(crate) mod tests {
                 .with_reason(Reason::Crawl)
                 .with_e_tag(Some(EXPECTED_QUOTED_E_TAG.to_string())),
         );
-        assert_eq_crawl_event(results[2].clone(), expected_unaffected_record_two());
+        assert_eq_event(results[2].clone(), expected_unaffected_record_two());
 
         let event = FlatS3EventMessage::new_with_generated_id()
             .with_key("key".to_string())
@@ -383,7 +383,7 @@ pub(crate) mod tests {
         let results = ingest_crawl(client.clone(), event.clone(), vec![default_version_id()]).await;
         assert_eq!(results.len(), 3);
         assert_eq!(results[0], event.clone().with_is_current_state(false));
-        assert_eq_crawl_event(
+        assert_eq_event(
             results[1].clone(),
             event
                 .with_sequencer(Some(
@@ -392,7 +392,7 @@ pub(crate) mod tests {
                 .with_last_modified_date(Some("1970-01-01 00:00:00.000000 +00:00".parse().unwrap()))
                 .with_reason(Reason::Crawl),
         );
-        assert_eq_crawl_event(results[2].clone(), expected_unaffected_record_two());
+        assert_eq_event(results[2].clone(), expected_unaffected_record_two());
 
         let event = FlatS3EventMessage::new_with_generated_id()
             .with_key("key".to_string())
@@ -410,7 +410,7 @@ pub(crate) mod tests {
         let results = ingest_crawl(client.clone(), event.clone(), vec![default_version_id()]).await;
         assert_eq!(results.len(), 3);
         assert_eq!(results[0], event.clone().with_is_current_state(false));
-        assert_eq_crawl_event(
+        assert_eq_event(
             results[1].clone(),
             event
                 .with_sequencer(Some(
@@ -419,7 +419,7 @@ pub(crate) mod tests {
                 .with_size(Some(1))
                 .with_reason(Reason::Crawl),
         );
-        assert_eq_crawl_event(results[2].clone(), expected_unaffected_record_two());
+        assert_eq_event(results[2].clone(), expected_unaffected_record_two());
 
         let event = FlatS3EventMessage::new_with_generated_id()
             .with_key("key".to_string())
@@ -437,7 +437,7 @@ pub(crate) mod tests {
         let results = ingest_crawl(client.clone(), event.clone(), vec![default_version_id()]).await;
         assert_eq!(results.len(), 3);
         assert_eq!(results[0], event.clone().with_is_current_state(false));
-        assert_eq_crawl_event(
+        assert_eq_event(
             results[1].clone(),
             event
                 .with_sequencer(Some(
@@ -446,7 +446,7 @@ pub(crate) mod tests {
                 .with_reason(Reason::Crawl)
                 .with_sha256(Some(EXPECTED_SHA256.to_string())),
         );
-        assert_eq_crawl_event(results[2].clone(), expected_unaffected_record_two());
+        assert_eq_event(results[2].clone(), expected_unaffected_record_two());
 
         // Attributes carry over from existing events in the database.
         let event = FlatS3EventMessage::new_with_generated_id()
@@ -466,7 +466,7 @@ pub(crate) mod tests {
         let results = ingest_crawl(client.clone(), event.clone(), vec![default_version_id()]).await;
         assert_eq!(results.len(), 2);
         assert_eq!(results[0], event.clone());
-        assert_eq_crawl_event(
+        assert_eq_event(
             results[1].clone(),
             expected_unaffected_record_two()
                 .with_sequencer(Some(
@@ -498,8 +498,8 @@ pub(crate) mod tests {
         assert_eq!(results.len(), 4);
         assert_eq!(results[0], event.clone().with_is_current_state(false));
 
-        assert_eq_crawl_event(results[1].clone(), expected_unaffected_record_one());
-        assert_eq_crawl_event(results[2].clone(), expected_unaffected_record_two());
+        assert_eq_event(results[1].clone(), expected_unaffected_record_one());
+        assert_eq_event(results[2].clone(), expected_unaffected_record_two());
 
         let mut deleted = results[3].clone();
         assert!(deleted.event_time.is_some());
@@ -600,7 +600,7 @@ pub(crate) mod tests {
 
         let results = fetch_results(&client).await;
         assert_eq!(results.len(), 5);
-        assert_eq_crawl_event(
+        assert_eq_event(
             results[0].clone(),
             event
                 .clone()
@@ -609,7 +609,7 @@ pub(crate) mod tests {
                 .with_event_type(EventType::Deleted)
                 .with_is_current_state(false),
         );
-        assert_eq_crawl_event(
+        assert_eq_event(
             results[1].clone(),
             event
                 .clone()
@@ -620,7 +620,7 @@ pub(crate) mod tests {
                     "000000000000000000000000000000-0100000000000000".to_string(),
                 )),
         );
-        assert_eq_crawl_event(
+        assert_eq_event(
             results[2].clone(),
             event
                 .clone()
@@ -629,14 +629,14 @@ pub(crate) mod tests {
                     "000000000000000000000000000000-0200000000000000".to_string(),
                 )),
         );
-        assert_eq_crawl_event(
+        assert_eq_event(
             results[3].clone(),
             event
                 .clone()
                 .with_sequencer(None)
                 .with_is_current_state(false),
         );
-        assert_eq_crawl_event(
+        assert_eq_event(
             results[4].clone(),
             event
                 .clone()
@@ -727,7 +727,7 @@ pub(crate) mod tests {
 
         let results = fetch_results(&client).await;
         assert_eq!(results.len(), 5);
-        assert_eq_crawl_event(
+        assert_eq_event(
             results[0].clone(),
             event
                 .clone()
@@ -738,7 +738,7 @@ pub(crate) mod tests {
                     "000000000000000000000000000000-0100000000000000".to_string(),
                 )),
         );
-        assert_eq_crawl_event(
+        assert_eq_event(
             results[1].clone(),
             event
                 .clone()
@@ -747,7 +747,7 @@ pub(crate) mod tests {
                 .with_event_type(EventType::Deleted)
                 .with_is_current_state(false),
         );
-        assert_eq_crawl_event(
+        assert_eq_event(
             results[2].clone(),
             event
                 .clone()
@@ -756,14 +756,14 @@ pub(crate) mod tests {
                     "000000000000000000000000000000-0200000000000000".to_string(),
                 )),
         );
-        assert_eq_crawl_event(
+        assert_eq_event(
             results[3].clone(),
             event
                 .clone()
                 .with_sequencer(None)
                 .with_is_current_state(false),
         );
-        assert_eq_crawl_event(
+        assert_eq_event(
             results[4].clone(),
             event
                 .clone()
@@ -773,7 +773,7 @@ pub(crate) mod tests {
         );
     }
 
-    fn assert_eq_crawl_event(mut left: FlatS3EventMessage, right: FlatS3EventMessage) {
+    pub(crate) fn assert_eq_event(mut left: FlatS3EventMessage, right: FlatS3EventMessage) {
         left.s3_object_id = right.s3_object_id;
         left.event_time = right.event_time;
         assert_eq!(left, right);
@@ -947,7 +947,7 @@ pub(crate) mod tests {
         results
     }
 
-    async fn fetch_results(client: &database::Client) -> Vec<FlatS3EventMessage> {
+    pub(crate) async fn fetch_results(client: &database::Client) -> Vec<FlatS3EventMessage> {
         S3Object::find()
             .order_by_asc(Column::Sequencer)
             .order_by_asc(Column::Key)

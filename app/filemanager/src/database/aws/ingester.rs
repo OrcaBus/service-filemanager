@@ -187,13 +187,7 @@ impl Ingester {
 
         // Reset state for records which represent the new state.
         query
-            .reset_current_state(
-                &mut tx,
-                &events.buckets,
-                &events.keys,
-                &events.version_ids,
-                &events.sequencers,
-            )
+            .reset_current_state(&mut tx, events.buckets, events.keys)
             .await?;
 
         tx.commit().await?;
@@ -562,7 +556,7 @@ pub(crate) mod tests {
         let ingester = test_ingester(pool);
         ingester.ingest(S3(events)).await.unwrap();
 
-        let s3_object_results = fetch_results(&ingester).await;
+        let s3_object_results = fetch_results_ordered(&ingester).await;
 
         assert_eq!(s3_object_results.len(), 1);
         assert!(
@@ -580,14 +574,14 @@ pub(crate) mod tests {
         let ingester = test_ingester(pool);
         ingester.ingest(S3(events.into())).await.unwrap();
 
-        let s3_object_results = fetch_results(&ingester).await;
+        let s3_object_results = fetch_results_ordered(&ingester).await;
 
         assert_eq!(s3_object_results.len(), 2);
 
         let message = expected_message(Some(0), EXPECTED_VERSION_ID.to_string(), true, Deleted)
             .with_is_current_state(false);
         assert_row(
-            &s3_object_results[1],
+            &s3_object_results[0],
             message,
             Some(EXPECTED_SEQUENCER_CREATED_ONE.to_string()),
             Some(Default::default()),
@@ -596,7 +590,7 @@ pub(crate) mod tests {
         let message = expected_message(None, EXPECTED_VERSION_ID.to_string(), false, Deleted)
             .with_is_current_state(false);
         assert_row(
-            &s3_object_results[0],
+            &s3_object_results[1],
             message,
             Some(EXPECTED_SEQUENCER_DELETED_ONE.to_string()),
             Some(Default::default()),
@@ -615,7 +609,7 @@ pub(crate) mod tests {
         let ingester = test_ingester(pool);
         ingester.ingest(S3(events)).await.unwrap();
 
-        let s3_object_results = fetch_results(&ingester).await;
+        let s3_object_results = fetch_results_ordered(&ingester).await;
 
         assert_eq!(s3_object_results.len(), 1);
         assert!(
@@ -641,13 +635,12 @@ pub(crate) mod tests {
         let ingester = test_ingester(pool);
         ingester.ingest(S3(events)).await.unwrap();
 
-        let s3_object_results = fetch_results(&ingester).await;
+        let s3_object_results = fetch_results_ordered(&ingester).await;
 
-        println!("{s3_object_results:#?}");
         assert_eq!(s3_object_results.len(), 2);
         assert_ingest_events(
-            &s3_object_results[1],
             &s3_object_results[0],
+            &s3_object_results[1],
             false,
             false,
             EXPECTED_VERSION_ID,
@@ -660,7 +653,7 @@ pub(crate) mod tests {
         ingester.ingest(S3(test_events(None))).await.unwrap();
         ingester.ingest(S3(test_events(None))).await.unwrap();
 
-        let s3_object_results = fetch_results(&ingester).await;
+        let s3_object_results = fetch_results_ordered(&ingester).await;
 
         assert_eq!(s3_object_results.len(), 2);
         assert!(
@@ -677,8 +670,8 @@ pub(crate) mod tests {
             s3_object_results[1].get::<i64, _>("number_duplicate_events")
         );
         assert_ingest_events(
-            &s3_object_results[1],
             &s3_object_results[0],
+            &s3_object_results[1],
             false,
             false,
             EXPECTED_VERSION_ID,
@@ -704,11 +697,11 @@ pub(crate) mod tests {
 
         ingester.ingest(S3(events_one)).await.unwrap();
 
-        let s3_object_results = fetch_results(&ingester).await;
+        let s3_object_results = fetch_results_ordered(&ingester).await;
 
         assert_eq!(s3_object_results.len(), 3);
         assert_with(
-            &s3_object_results[0],
+            &s3_object_results[2],
             None,
             Some(EXPECTED_SEQUENCER_CREATED_TWO.to_string()),
             EXPECTED_VERSION_ID.to_string(),
@@ -726,7 +719,7 @@ pub(crate) mod tests {
             false,
         );
         assert_with(
-            &s3_object_results[2],
+            &s3_object_results[0],
             Some(0),
             Some(EXPECTED_SEQUENCER_CREATED_ONE.to_string()),
             EXPECTED_VERSION_ID.to_string(),
@@ -755,12 +748,12 @@ pub(crate) mod tests {
 
         ingester.ingest(S3(events_one)).await.unwrap();
 
-        let s3_object_results = fetch_results(&ingester).await;
+        let s3_object_results = fetch_results_ordered(&ingester).await;
 
         assert_eq!(s3_object_results.len(), 3);
         assert_missing_created(
-            &s3_object_results[2],
             &s3_object_results[0],
+            &s3_object_results[2],
             EXPECTED_VERSION_ID,
         );
         assert_with(
@@ -824,12 +817,12 @@ pub(crate) mod tests {
 
         ingester.ingest(S3(events)).await.unwrap();
 
-        let s3_object_results = fetch_results(&ingester).await;
+        let s3_object_results = fetch_results_ordered(&ingester).await;
 
         assert_eq!(s3_object_results.len(), 2);
         assert_ingest_events(
-            &s3_object_results[1],
             &s3_object_results[0],
+            &s3_object_results[1],
             false,
             false,
             &default_version_id(),
@@ -848,7 +841,7 @@ pub(crate) mod tests {
             .await
             .unwrap();
 
-        let s3_object_results = fetch_results(&ingester).await;
+        let s3_object_results = fetch_results_ordered(&ingester).await;
 
         assert_eq!(s3_object_results.len(), 2);
         assert_eq!(
@@ -860,8 +853,8 @@ pub(crate) mod tests {
             s3_object_results[1].get::<i64, _>("number_duplicate_events")
         );
         assert_ingest_events(
-            &s3_object_results[1],
             &s3_object_results[0],
+            &s3_object_results[1],
             false,
             false,
             &default_version_id(),
@@ -885,13 +878,12 @@ pub(crate) mod tests {
 
         ingester.ingest(S3(events)).await.unwrap();
 
-        let s3_object_results = fetch_results(&ingester).await;
+        let s3_object_results = fetch_results_ordered(&ingester).await;
 
-        println!("{s3_object_results:#?}");
         assert_eq!(s3_object_results.len(), 3);
         assert_eq!(
             0,
-            s3_object_results[0].get::<i64, _>("number_duplicate_events")
+            s3_object_results[2].get::<i64, _>("number_duplicate_events")
         );
         assert_eq!(
             1,
@@ -899,11 +891,11 @@ pub(crate) mod tests {
         );
         assert_eq!(
             1,
-            s3_object_results[2].get::<i64, _>("number_duplicate_events")
+            s3_object_results[0].get::<i64, _>("number_duplicate_events")
         );
 
         assert_with(
-            &s3_object_results[2],
+            &s3_object_results[0],
             Some(0),
             Some(EXPECTED_SEQUENCER_CREATED_ONE.to_string()),
             EXPECTED_VERSION_ID.to_string(),
@@ -912,7 +904,7 @@ pub(crate) mod tests {
             false,
         );
         assert_with(
-            &s3_object_results[0],
+            &s3_object_results[2],
             Some(0),
             Some(EXPECTED_SEQUENCER_CREATED_TWO.to_string()),
             "version_id".to_string(),
@@ -944,12 +936,12 @@ pub(crate) mod tests {
         ingester.ingest(S3(events_one)).await.unwrap();
         ingester.ingest(S3(events_two)).await.unwrap();
 
-        let s3_object_results = fetch_results(&ingester).await;
+        let s3_object_results = fetch_results_ordered(&ingester).await;
 
         assert_eq!(s3_object_results.len(), 2);
         assert_missing_deleted(
-            &s3_object_results[1],
             &s3_object_results[0],
+            &s3_object_results[1],
             EXPECTED_VERSION_ID,
             false,
             true,

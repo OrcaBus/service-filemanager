@@ -58,7 +58,7 @@ export class StatelessStack extends cdk.Stack {
         },
       },
       unitAppTestConfig: {
-        command: ['cd app', 'make test'],
+        command: ['cd app', 'make test', 'mv .env.example .env'],
       },
     });
 

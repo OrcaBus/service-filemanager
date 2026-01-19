@@ -57,6 +57,9 @@ export class StatelessStack extends cdk.Stack {
           },
         },
       },
+      unitAppTestConfig: {
+        command: ['cd app', 'make test'],
+      },
     });
 
     this.pipeline = deployment.pipeline;

@@ -4,10 +4,10 @@
 
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { EventBridge } from '@aws-sdk/client-eventbridge';
-import { getFileManagerStatefulProps } from '../infrastructure/stage/config';
-import { FileManagerStatefulStack } from '../infrastructure/stage/filemanager-stateful-stack';
+import { getFileManagerStatefulProps } from '../../infrastructure/stage/config';
+import { FileManagerStatefulStack } from '../../infrastructure/stage/filemanager-stateful-stack';
 import { App } from 'aws-cdk-lib';
-import { FILEMANAGER_INGEST_QUEUE } from '../infrastructure/stage/constants';
+import { FILEMANAGER_INGEST_QUEUE } from '../../infrastructure/stage/constants';
 
 let eventbridge: EventBridge;
 

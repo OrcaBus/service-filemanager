@@ -65,11 +65,21 @@ export class StatelessStack extends cdk.Stack {
         },
       },
       pipelineName: 'OrcaBus-StatelessFileManager',
-      cdkSynthCmd: ['pnpm install --frozen-lockfile --ignore-scripts', 'pnpm cdk-stateless synth'],
+      cdkSynthCmd: ['pnpm cdk-stateless synth'],
       synthBuildSpec: buildSpec,
       unitAppTestConfig: {
-        command: ['cd app', 'mv .env.example .env', 'make test'],
+        command: ['cd app', 'make test'],
         partialBuildSpec: buildSpec,
+      },
+      unitIacTestConfig: {
+        command: ['pnpm test --testPathPatterns=test/stateless'],
+        partialBuildSpec: buildSpec,
+      },
+      cacheOptions: {
+        namespace: 'filemanager-stateless',
+      },
+      driftCheckConfig: {
+        cdkCommand: 'pnpm cdk-stateless',
       },
     });
 

@@ -22,10 +22,19 @@ export class StatefulStack extends cdk.Stack {
         prod: getFileManagerStatefulProps('PROD'),
       },
       pipelineName: 'OrcaBus-StatefulFileManager',
-      cdkSynthCmd: ['pnpm install --frozen-lockfile --ignore-scripts', 'pnpm cdk-stateful synth'],
+      cdkSynthCmd: ['pnpm cdk-stateful synth'],
       // No app tests for stateful stack.
       unitAppTestConfig: {
         command: [],
+      },
+      unitIacTestConfig: {
+        command: ['pnpm test --testPathPatterns=test/stateful'],
+      },
+      cacheOptions: {
+        namespace: 'filemanager-stateful',
+      },
+      driftCheckConfig: {
+        cdkCommand: 'pnpm cdk-stateful',
       },
     });
 

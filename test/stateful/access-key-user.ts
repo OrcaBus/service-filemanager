@@ -1,7 +1,7 @@
 import * as cdk from 'aws-cdk-lib';
 import { Template } from 'aws-cdk-lib/assertions';
-import { getFileManagerStatefulProps } from '../infrastructure/stage/config';
-import { FileManagerStatefulStack } from '../infrastructure/stage/filemanager-stateful-stack';
+import { getFileManagerStatefulProps } from '../../infrastructure/stage/config';
+import { FileManagerStatefulStack } from '../../infrastructure/stage/filemanager-stateful-stack';
 import {
   FILE_MANAGER_PRESIGN_USER,
   FILE_MANAGER_PRESIGN_USER_SECRET,

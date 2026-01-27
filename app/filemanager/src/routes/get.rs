@@ -96,20 +96,20 @@ async fn presign_url_by_id(
 
     // If the last object ordered by sequencer is the requested one, then this is a
     // current object.
-    if let Some(current) = current.last() {
-        if current.s3_object_id == response.s3_object_id {
-            return Ok(Json(
-                PresignedUrlBuilder::presign_from_model(
-                    &state,
-                    response,
-                    presigned.response_content_disposition(),
-                    content_type,
-                    content_encoding,
-                    access_key_secret_id.as_deref(),
-                )
-                .await?,
-            ));
-        }
+    if let Some(current) = current.last()
+        && current.s3_object_id == response.s3_object_id
+    {
+        return Ok(Json(
+            PresignedUrlBuilder::presign_from_model(
+                &state,
+                response,
+                presigned.response_content_disposition(),
+                content_type,
+                content_encoding,
+                access_key_secret_id.as_deref(),
+            )
+            .await?,
+        ));
     }
 
     Ok(Json(None))

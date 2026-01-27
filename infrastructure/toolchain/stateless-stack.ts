@@ -78,9 +78,6 @@ export class StatelessStack extends cdk.Stack {
       cacheOptions: {
         namespace: 'filemanager-stateless',
       },
-      driftCheckConfig: {
-        cdkCommand: 'pnpm cdk-stateless',
-      },
     });
 
     this.pipeline = deployment.pipeline;

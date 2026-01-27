@@ -32,8 +32,7 @@ RUN --mount=type=cache,target=/root/.cache/sccache cargo chef cook --bin fileman
 COPY . .
 RUN --mount=type=cache,target=/root/.cache/sccache cargo build --bin filemanager-api-server && sccache --show-stats
 
-FROM public.ecr.aws/docker/library/debian:bookworm-slim AS runtime
-RUN env
+FROM public.ecr.aws/docker/library/debian:trixie-slim AS runtime
 
 RUN apt -y update && apt -y install curl
 COPY --from=builder /app/target/debug/filemanager-api-server /usr/local/bin

@@ -66,13 +66,13 @@ impl Wildcard {
             // If there is a backslash, then the next character can be '*' and not be a wildcard.
             if char == '\\' {
                 let peek = chars.peek();
-                if let Some((_, next_char)) = peek {
-                    if *next_char == '*' || *next_char == '?' || *next_char == '\\' {
-                        // Skip the next character as we have just processed it.
-                        chars.next();
-                        escaped_positions.push(pos);
-                        continue;
-                    }
+                if let Some((_, next_char)) = peek
+                    && (*next_char == '*' || *next_char == '?' || *next_char == '\\')
+                {
+                    // Skip the next character as we have just processed it.
+                    chars.next();
+                    escaped_positions.push(pos);
+                    continue;
                 }
 
                 escaped_positions.push(pos);

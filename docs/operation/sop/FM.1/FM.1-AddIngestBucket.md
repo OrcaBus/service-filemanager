@@ -59,7 +59,7 @@ dependency. `FILE_MANAGER_BUCKETS` is used inside this repo in [config.ts][confi
 the version of `platform-cdk-constructs` in [package.json][package] for changes to take effect.
 
 After updating the package.json, run `make install && make check` to also update the lock file and ensure that styling
-is applied. Also, to ensure that tests pass, update [stage.test.ts][test-stage] to suppress warnings about IAM5 wildcard
+is applied. Also, to ensure that tests pass, update [util.ts][test-stage] to suppress warnings about IAM5 wildcard
 permissions for the bucket. This warning can be suppressed as the filemanager requires access to all objects in the
 bucket. Then, create a pull request with the changes.
 
@@ -165,6 +165,6 @@ in the output:
 [s3-events]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/EventNotifications.html
 [config]: ../../../../infrastructure/stage/config.ts
 [package]: ../../../../package.json
-[test-stage]: ../../../../test/stage.test.ts
+[test-stage]: ../../../../test/util.ts
 [permissions]: ../../../../README.md#permissions--access-control
 [api-guide]: ../../API_GUIDE.md#querying-records

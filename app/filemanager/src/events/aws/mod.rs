@@ -469,41 +469,39 @@ impl FlatS3EventMessages {
         messages.sort_by(|a, b| {
             if let (Some(a_sequencer), Some(b_sequencer)) =
                 (a.sequencer.as_ref(), b.sequencer.as_ref())
+                && a.bucket == b.bucket
+                && a.key == b.key
+                && a.version_id == b.version_id
+                && a.event_type == b.event_type
             {
-                if a.bucket == b.bucket
-                    && a.key == b.key
-                    && a.version_id == b.version_id
-                    && a.event_type == b.event_type
-                {
-                    return (
-                        a_sequencer,
-                        &a.event_time,
-                        &a.event_type,
-                        &a.bucket,
-                        &a.key,
-                        &a.version_id,
-                        &a.size,
-                        &a.e_tag,
+                return (
+                    a_sequencer,
+                    &a.event_time,
+                    &a.event_type,
+                    &a.bucket,
+                    &a.key,
+                    &a.version_id,
+                    &a.size,
+                    &a.e_tag,
+                    &a.sha256,
+                    &a.storage_class,
+                    &a.last_modified_date,
+                    &a.is_delete_marker,
+                )
+                    .cmp(&(
+                        b_sequencer,
+                        &b.event_time,
+                        &b.event_type,
+                        &b.bucket,
+                        &b.key,
+                        &b.version_id,
+                        &b.size,
+                        &b.e_tag,
                         &a.sha256,
-                        &a.storage_class,
-                        &a.last_modified_date,
-                        &a.is_delete_marker,
-                    )
-                        .cmp(&(
-                            b_sequencer,
-                            &b.event_time,
-                            &b.event_type,
-                            &b.bucket,
-                            &b.key,
-                            &b.version_id,
-                            &b.size,
-                            &b.e_tag,
-                            &a.sha256,
-                            &b.storage_class,
-                            &b.last_modified_date,
-                            &b.is_delete_marker,
-                        ));
-                }
+                        &b.storage_class,
+                        &b.last_modified_date,
+                        &b.is_delete_marker,
+                    ));
             }
 
             (

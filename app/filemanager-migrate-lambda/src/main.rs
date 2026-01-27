@@ -80,6 +80,7 @@ async fn main() -> Result<(), Error> {
 
                     Ok(())
                 }
+                _ => Ok(()),
             }
         },
     ))

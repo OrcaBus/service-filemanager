@@ -58,20 +58,20 @@ impl From<ErrorKind> for Error {
     fn from(error_kind: ErrorKind) -> Self {
         let loc = Location::caller();
 
-        if let Some(path) = workspace_path() {
-            if let Ok(source) = read_to_string(path.join(loc.file())) {
-                let offset = SourceOffset::from_location(
-                    source.as_str(),
-                    loc.line() as usize,
-                    loc.column() as usize,
-                );
+        if let Some(path) = workspace_path()
+            && let Ok(source) = read_to_string(path.join(loc.file()))
+        {
+            let offset = SourceOffset::from_location(
+                source.as_str(),
+                loc.line() as usize,
+                loc.column() as usize,
+            );
 
-                return Self::new(
-                    error_kind,
-                    Some(NamedSource::new(loc.file(), source)),
-                    Some(offset),
-                );
-            }
+            return Self::new(
+                error_kind,
+                Some(NamedSource::new(loc.file(), source)),
+                Some(offset),
+            );
         }
 
         Self::new(error_kind, None, None)

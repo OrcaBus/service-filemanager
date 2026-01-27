@@ -2,11 +2,11 @@
 # When running this microservice from the Docker Compose root, this Dockerfile
 # will build the image, install dependencies, and start the server
 
-FROM public.ecr.aws/docker/library/rust:1.88 AS chef
+FROM public.ecr.aws/docker/library/rust:1.93 AS chef
 
-ENV SCCACHE_VERSION=0.10.0
-ENV CARGO_CHEF_VERSION=0.1.72
-ENV CARGO_BINSTALL_VERSION=1.14.1
+ENV SCCACHE_VERSION=0.13.0
+ENV CARGO_CHEF_VERSION=0.1.73
+ENV CARGO_BINSTALL_VERSION=1.17.3
 
 ENV RUSTC_WRAPPER="/usr/local/cargo/bin/sccache"
 

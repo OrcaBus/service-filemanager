@@ -22,26 +22,26 @@
   "license": "MIT",
   "packageManager": "pnpm@10.13.1",
   "devDependencies": {
-    "@aws-sdk/client-eventbridge": "^3.936.0",
-    "@eslint/js": "^9.39.1",
+    "@aws-sdk/client-eventbridge": "^3.975.0",
+    "@eslint/js": "^9.39.2",
     "@types/jest": "^30.0.0",
-    "@types/node": "^24.10.1",
-    "aws-cdk": "^2.1033.0",
+    "@types/node": "^24.10.9",
+    "aws-cdk": "^2.1103.0",
     "cdk-nag": "^2.37.55",
-    "eslint": "^9.39.1",
-    "globals": "^16.5.0",
+    "eslint": "^9.39.2",
+    "globals": "^17.1.0",
     "jest": "^30.2.0",
-    "prettier": "^3.6.2",
+    "prettier": "^3.8.1",
     "test-js": "^0.0.4",
-    "ts-jest": "^29.4.5",
+    "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.47.0"
+    "typescript-eslint": "^8.54.0"
   },
   "dependencies": {
     "@orcabus/platform-cdk-constructs": "1.0.8",
-    "aws-cdk-lib": "^2.227.0",
-    "cargo-lambda-cdk": "^0.0.35",
-    "constructs": "^10.4.3"
+    "aws-cdk-lib": "^2.236.0",
+    "cargo-lambda-cdk": "^0.0.36",
+    "constructs": "^10.4.5"
   }
 }

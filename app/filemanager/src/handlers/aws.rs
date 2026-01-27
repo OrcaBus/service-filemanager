@@ -256,12 +256,10 @@ pub(crate) mod tests {
     async fn test_ingest_event(pool: PgPool) {
         let s3_client = s3_client_expectations();
 
-        let event = SqsEvent {
-            records: vec![SqsMessage {
-                body: Some(expected_event_record_simple(false)),
-                ..Default::default()
-            }],
-        };
+        let mut event = SqsEvent::default();
+        let mut message = SqsMessage::default();
+        message.body = Some(expected_event_record_simple(false));
+        event.records = vec![message];
 
         let ingester = ingest_event(
             event,

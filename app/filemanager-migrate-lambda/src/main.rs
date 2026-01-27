@@ -79,7 +79,8 @@ async fn main() -> Result<(), Error> {
                     trace!(delete = ?delete, "during delete");
 
                     Ok(())
-                }
+                },
+                _ => Ok(())
             }
         },
     ))

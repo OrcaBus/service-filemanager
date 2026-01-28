@@ -7,6 +7,7 @@ import { Alarm, ComparisonOperator, Metric, TreatMissingData } from 'aws-cdk-lib
 import { MetricFilter } from 'aws-cdk-lib/aws-logs';
 import { Topic } from 'aws-cdk-lib/aws-sns';
 import { SnsAction } from 'aws-cdk-lib/aws-cloudwatch-actions';
+import { Duration } from 'aws-cdk-lib';
 
 /**
  * Props for controlling access to buckets.
@@ -45,6 +46,7 @@ export class IngestFunction extends Function {
   constructor(scope: Construct, id: string, props: IngestFunctionProps) {
     super(scope, id, {
       package: 'filemanager-ingest-lambda',
+      timeout: Duration.minutes(15),
       environment: {
         FILEMANAGER_INGESTER_TAG_NAME: FILEMANAGER_INGEST_ID_TAG_NAME,
         ...props.environment,

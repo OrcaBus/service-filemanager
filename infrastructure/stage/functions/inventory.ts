@@ -1,6 +1,7 @@
 import { Construct } from 'constructs';
 import * as fn from './function';
 import { DatabaseProps } from './function';
+import { Duration } from 'aws-cdk-lib';
 
 /**
  * The name of the inventory Lambda function.
@@ -30,6 +31,7 @@ export class InventoryFunction extends fn.Function {
   constructor(scope: Construct, id: string, props: InventoryFunctionProps) {
     super(scope, id, {
       package: 'filemanager-inventory-lambda',
+      timeout: Duration.minutes(15),
       ...props,
       functionName: INVENTORY_FUNCTION_NAME,
     });

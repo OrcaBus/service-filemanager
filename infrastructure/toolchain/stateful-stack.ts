@@ -28,7 +28,10 @@ export class StatefulStack extends cdk.Stack {
         command: [],
       },
       unitIacTestConfig: {
-        command: ['pnpm test --testPathPatterns=test/stateful'],
+        command: [
+          'pnpm test --testPathPatterns=test/stateful',
+          'pnpm test --testPathPatterns=test/integration',
+        ],
       },
       cacheOptions: {
         namespace: 'filemanager-stateful',

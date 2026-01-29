@@ -32,6 +32,8 @@ current_versions as (
         where
             input.bucket = s3_object.bucket and
             input.key = s3_object.key
+        order by s3_object.sequencer
+        for update
     ) s3_object
 ),
 -- This selects the single event that is the current state for the key, i.e. the record that represents the current
@@ -52,6 +54,7 @@ current_state as (
             not current_versions.is_delete_marker
         ) as is_current_state
     from current_versions
+    order by current_versions.sequencer
 )
 update s3_object
 set is_current_state = current_state.is_current_state

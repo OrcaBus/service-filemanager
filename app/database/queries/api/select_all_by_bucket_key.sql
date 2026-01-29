@@ -51,5 +51,4 @@ cross join lateral (
         input.version_id = s3_object.version_id
     order by s3_object.sequencer desc nulls last
 )
-as s3_object
-for update;
+as s3_object;

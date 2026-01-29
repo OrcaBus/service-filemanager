@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "tsc && jest",
+    "test": "tsc && NODE_OPTIONS=\"$NODE_OPTIONS --experimental-vm-modules\" jest",
     "cdk": "cdk",
     "cdk-stateless": "cdk -c deployMode=stateless",
     "cdk-stateful": "cdk -c deployMode=stateful",

@@ -45,29 +45,65 @@ export const getFileManagerStatelessProps = (stage: StageName): FileManagerState
 };
 
 export const ingestPattern = () => {
+  // NOT KEY is iap_upload_test.tmp AND (SIZE > 0 OR NOT KEY ends with "/") expands to
+  // (NOT KEY is iap_upload_test.tmp AND SIZE > 0) OR (NOT KEY is iap_upload_test.tmp AND NOT KEY ends with "/")
   return {
     $or: [
       {
+        key: [
+          {
+            'anything-but': {
+              wildcard: ['byob-icav2/.iap_upload_test.tmp', 'testdata/.iap_upload_test.tmp'],
+            },
+          },
+        ],
         size: [{ numeric: ['>', 0] }],
       },
       {
-        key: [{ 'anything-but': { wildcard: ['*/'] } }],
+        key: [
+          {
+            'anything-but': {
+              wildcard: ['byob-icav2/.iap_upload_test.tmp', 'testdata/.iap_upload_test.tmp', '*/'],
+            },
+          },
+        ],
       },
     ],
   };
 };
 
 export const ingestCachePattern = () => {
-  // NOT KEY in cache AND (SIZE > 0 OR NOT KEY ends with "/") expands to
-  // (NOT KEY in cache and SIZE > 0) OR (NOT KEY in cache and NOT KEY ends with "/")\
+  // NOT KEY is iap_upload_test.tmp AND NOT KEY in cache AND (SIZE > 0 OR NOT KEY ends with "/") expands to
+  // (NOT KEY is iap_upload_test.tmp AND NOT KEY in cache AND SIZE > 0) OR (NOT KEY is iap_upload_test.tmp AND NOT KEY in cache AND NOT KEY ends with "/")
   return {
     $or: [
       {
-        key: [{ 'anything-but': { wildcard: ['byob-icav2/*/cache/*'] } }],
+        key: [
+          {
+            'anything-but': {
+              wildcard: [
+                'byob-icav2/*/cache/*',
+                'byob-icav2/.iap_upload_test.tmp',
+                'testdata/.iap_upload_test.tmp',
+              ],
+            },
+          },
+        ],
         size: [{ numeric: ['>', 0] }],
       },
       {
-        key: [{ 'anything-but': { wildcard: ['byob-icav2/*/cache/*', '*/'] } }],
+        key: [
+          {
+            'anything-but': {
+              wildcard: [
+                'byob-icav2/*/cache/*',
+                '*/',
+                'byob-icav2/.iap_upload_test.tmp',
+                'testdata/.iap_upload_test.tmp',
+              ],
+            },
+          },
+        ],
       },
     ],
   };

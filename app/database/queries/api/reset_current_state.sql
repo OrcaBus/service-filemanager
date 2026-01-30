@@ -40,6 +40,7 @@ current_versions as (
 current_state as (
     select
         s3_object_id,
+        sequencer,
         (
             row_number() over (
                 partition by
@@ -52,9 +53,13 @@ current_state as (
             not current_versions.is_delete_marker
         ) as is_current_state
     from current_versions
+),
+-- Apply ordering to prevent deadlocks.
+current_state_ordered as (
+    select * from current_state order by current_state.sequencer for update
 )
 update s3_object
-set is_current_state = current_state.is_current_state
-from current_state
-where s3_object.s3_object_id = current_state.s3_object_id
+set is_current_state = current_state_ordered.is_current_state
+from current_state_ordered
+where s3_object.s3_object_id = current_state_ordered.s3_object_id
 returning s3_object.s3_object_id, s3_object.is_current_state;

@@ -88,7 +88,8 @@ jobs:
 
       - run: corepack enable
       - run: pnpm install --frozen-lockfile --ignore-scripts
-      - run: make test
+      - run: pnpm test --testPathPatterns=test/stateless
+      - run: pnpm test --testPathPatterns=test/stateful
 
   test-app:
     runs-on: ubuntu-24.04-arm

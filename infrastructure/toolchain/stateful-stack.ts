@@ -4,6 +4,7 @@ import { DeploymentStackPipeline } from '@orcabus/platform-cdk-constructs/deploy
 import { getFileManagerStatefulProps } from '../stage/config';
 import { FileManagerStatefulStack } from '../stage/filemanager-stateful-stack';
 import { Pipeline } from 'aws-cdk-lib/aws-codepipeline';
+import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 
 export class StatefulStack extends cdk.Stack {
   readonly pipeline: Pipeline;
@@ -30,7 +31,13 @@ export class StatefulStack extends cdk.Stack {
       unitIacTestConfig: {
         command: [
           'pnpm test --testPathPatterns=test/stateful',
-          'pnpm test --testPathPatterns=test/integration',
+          'pnpm test --testPathPatterns=test/stateful-integration',
+        ],
+        rolePolicyStatements: [
+          new PolicyStatement({
+            actions: ['events:TestEventPattern'],
+            resources: ['*'],
+          }),
         ],
       },
       cacheOptions: {

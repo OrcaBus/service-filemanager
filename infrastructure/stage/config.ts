@@ -50,11 +50,23 @@ export const ingestPattern = () => {
   return {
     $or: [
       {
-        key: [{ 'anything-but': { wildcard: ['byob-icav2/.iap_upload_test.tmp'] } }],
+        key: [
+          {
+            'anything-but': {
+              wildcard: ['byob-icav2/.iap_upload_test.tmp', 'testdata/.iap_upload_test.tmp'],
+            },
+          },
+        ],
         size: [{ numeric: ['>', 0] }],
       },
       {
-        key: [{ 'anything-but': { wildcard: ['byob-icav2/.iap_upload_test.tmp', '*/'] } }],
+        key: [
+          {
+            'anything-but': {
+              wildcard: ['byob-icav2/.iap_upload_test.tmp', 'testdata/.iap_upload_test.tmp', '*/'],
+            },
+          },
+        ],
       },
     ],
   };
@@ -69,7 +81,11 @@ export const ingestCachePattern = () => {
         key: [
           {
             'anything-but': {
-              wildcard: ['byob-icav2/*/cache/*', 'byob-icav2/.iap_upload_test.tmp'],
+              wildcard: [
+                'byob-icav2/*/cache/*',
+                'byob-icav2/.iap_upload_test.tmp',
+                'testdata/.iap_upload_test.tmp',
+              ],
             },
           },
         ],
@@ -79,7 +95,12 @@ export const ingestCachePattern = () => {
         key: [
           {
             'anything-but': {
-              wildcard: ['byob-icav2/*/cache/*', '*/', 'byob-icav2/.iap_upload_test.tmp'],
+              wildcard: [
+                'byob-icav2/*/cache/*',
+                '*/',
+                'byob-icav2/.iap_upload_test.tmp',
+                'testdata/.iap_upload_test.tmp',
+              ],
             },
           },
         ],

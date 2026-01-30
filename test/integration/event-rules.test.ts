@@ -64,6 +64,14 @@ async function testIapUploadTest(event: any, pattern: any) {
   event['detail']['object']['size'] = 1;
   expect(await testEventPattern(event, pattern)).toBe(false);
 
+  event['detail']['object']['key'] = 'testdata/.iap_upload_test.tmp';
+  event['detail']['object']['size'] = 0;
+  expect(await testEventPattern(event, pattern)).toBe(false);
+
+  event['detail']['object']['key'] = 'testdata/.iap_upload_test.tmp';
+  event['detail']['object']['size'] = 1;
+  expect(await testEventPattern(event, pattern)).toBe(false);
+
   event['detail']['object']['key'] = 'byob-icav2/.iap_upload_test.tmp/example';
   event['detail']['object']['size'] = 1;
   expect(await testEventPattern(event, pattern)).toBe(true);
@@ -77,6 +85,14 @@ async function testIapUploadTest(event: any, pattern: any) {
   expect(await testEventPattern(event, pattern)).toBe(true);
 
   event['detail']['object']['key'] = 'byob-icav2/.iap_upload_test.tmp/';
+  event['detail']['object']['size'] = 0;
+  expect(await testEventPattern(event, pattern)).toBe(false);
+
+  event['detail']['object']['key'] = 'testdata/.iap_upload_test.tmp/example';
+  event['detail']['object']['size'] = 0;
+  expect(await testEventPattern(event, pattern)).toBe(true);
+
+  event['detail']['object']['key'] = 'testdata/.iap_upload_test.tmp/';
   event['detail']['object']['size'] = 0;
   expect(await testEventPattern(event, pattern)).toBe(false);
 }

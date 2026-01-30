@@ -31,7 +31,7 @@ export class StatefulStack extends cdk.Stack {
       unitIacTestConfig: {
         command: [
           'pnpm test --testPathPatterns=test/stateful',
-          'pnpm test --testPathPatterns=test/stateful-integration',
+          'pnpm test --testPathPatterns=test/integration-stateful',
         ],
         rolePolicyStatements: [
           new PolicyStatement({

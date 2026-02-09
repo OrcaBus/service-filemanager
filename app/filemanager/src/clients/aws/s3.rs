@@ -115,7 +115,7 @@ impl Client {
                 break;
             }
 
-            let mut next = list(result.next_key_marker, result.version_id_marker).await?;
+            let mut next = list(result.next_key_marker, result.next_version_id_marker).await?;
 
             next.versions
                 .get_or_insert_default()
@@ -125,6 +125,9 @@ impl Client {
                 .extend(result.common_prefixes.unwrap_or_default());
             next.max_keys =
                 Some(next.max_keys.unwrap_or_default() + result.max_keys.unwrap_or_default());
+            next.delete_markers
+                .get_or_insert_default()
+                .extend(result.delete_markers.unwrap_or_default());
 
             result = next;
         }

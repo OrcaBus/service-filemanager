@@ -3,8 +3,8 @@
 
 use async_trait::async_trait;
 use sea_orm::{DatabaseConnection, SqlxPostgresConnector};
-use sqlx::postgres::PgConnectOptions;
 use sqlx::PgPool;
+use sqlx::postgres::PgConnectOptions;
 use tracing::debug;
 
 use crate::database::aws::credentials::IamGenerator;
@@ -13,8 +13,8 @@ use crate::database::aws::ingester_paired::IngesterPaired;
 use crate::database::entities::sea_orm_active_enums::Reason;
 use crate::env::Config;
 use crate::error::Result;
-use crate::events::aws::{FlatS3EventMessage, FlatS3EventMessages};
 use crate::events::EventSourceType;
+use crate::events::aws::{FlatS3EventMessage, FlatS3EventMessages};
 
 pub mod aws;
 pub mod entities;
@@ -182,14 +182,14 @@ pub trait Migrate {
 pub(crate) mod tests {
     use chrono::{DateTime, Utc};
     use sea_orm::prelude::Json;
-    use sqlx::{query, Executor, PgPool, Row};
+    use sqlx::{Executor, PgPool, Row, query};
 
     use crate::database::aws::migration::tests::MIGRATOR;
     use crate::database::entities::sea_orm_active_enums::{ArchiveStatus, Reason};
+    use crate::events::aws::StorageClass;
     use crate::events::aws::message::EventType;
     use crate::events::aws::message::EventType::{Created, Deleted};
     use crate::events::aws::tests::{EXPECTED_SEQUENCER_CREATED_ONE, EXPECTED_VERSION_ID};
-    use crate::events::aws::StorageClass;
     use crate::uuid::UuidGenerator;
 
     #[sqlx::test(migrator = "MIGRATOR")]

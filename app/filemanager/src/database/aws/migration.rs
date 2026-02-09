@@ -56,9 +56,9 @@ impl Migrate for Migration {
 #[cfg(test)]
 pub(crate) mod tests {
     use lazy_static::lazy_static;
-    use sqlx::postgres::PgRow;
     use sqlx::PgPool;
     use sqlx::Row;
+    use sqlx::postgres::PgRow;
 
     use super::*;
 
@@ -81,8 +81,7 @@ pub(crate) mod tests {
 
     async fn check_table_exists(migration: &Migration, table_name: &str) -> PgRow {
         sqlx::query(&format!(
-            "select exists (select from information_schema.tables where table_name = '{}')",
-            table_name
+            "select exists (select from information_schema.tables where table_name = '{table_name}')"
         ))
         .fetch_one(migration.client().pool())
         .await

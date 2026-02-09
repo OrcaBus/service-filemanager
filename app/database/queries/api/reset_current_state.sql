@@ -1,6 +1,6 @@
--- Resets the `is_current_state` to false for a set of objects based on the `bucket`, `key`, `version_id`
--- and `sequencer`. This is used to update the current state so that a new object can have it's `is_current_state`
--- set to true based on whether it is a `Created` or `Deleted` event.
+-- Resets the `is_current_state` to false for a set of objects based on the `bucket` and `key`. The current state of
+-- an object is the one that represents what S3 sees when fetching a key. I.e. it's the most current version of an
+-- object that hasn't been permanently deleted, and is not a delete marker.
 
 -- Unnest input.
 with input as (
@@ -8,53 +8,58 @@ with input as (
         *
     from unnest(
         $1::text[],
-        $2::text[],
-        $3::text[],
-        $4::text[]
+        $2::text[]
     ) as input (
         bucket,
-        key,
-        version_id,
-        sequencer
+        key
     )
 ),
--- Select objects to update.
-to_update as (
+-- This selects all valid current versions of an object, i.e. those that have not been permanently deleted from S3. To
+-- do this, the query will partition over version_ids and mark the object version as current if a `Created` event is
+-- the latest. Delete markers are treated specially in that they represent a current object version although one that
+-- has been deleted.
+current_versions as (
     select * from input cross join lateral (
         select
             s3_object_id,
-            -- This finds the first value in the set which represents the most up-to-date state.
-            -- If ordered by the sequencer, the first row is the one that needs to have `is_current_state`
-            -- set to 'true' only for `Created` events, as `Deleted` events are always non-current state.
-            case when row_number() over (order by s3_object.sequencer desc nulls last) = 1 then
-                event_type = 'Created'
-            -- Set `is_current_state` to 'false' for all other rows, as this is now historical data.
-            else
-                false
-            end as updated_state
+            is_delete_marker,
+            sequencer,
+            (
+                row_number() over (partition by s3_object.version_id order by s3_object.sequencer desc nulls last) = 1 and
+                (s3_object.is_delete_marker or s3_object.event_type = 'Created')
+            ) as is_current_version
         from s3_object
         where
-            -- This should be fairly efficient as it's only targeting objects where `is_current_state` is true,
-            -- or objects with the highest sequencer values (in case of an out-of-order event). This means that
-            -- although there is a performance impact for running this on ingestion, it should be minimal with
-            -- the right indexes.
             input.bucket = s3_object.bucket and
-            input.key = s3_object.key and
-            -- Note that we need to fetch all versions of an object, because when a record is updated,
-            -- previous versions need to have their `is_current_state` set to false.
-            -- This is an optimization which prevents querying against all objects in the set.
-            (
-                -- Only need to update current objects
-                s3_object.is_current_state = true or
-                -- Or objects where there is a newer sequencer than the one being processed.
-                -- This is required in case an out-of-order event is encountered. This always
-                -- includes the object being processed as it's required for the above row-logic.
-                s3_object.sequencer >= input.sequencer
-            )
+            input.key = s3_object.key
     ) s3_object
+),
+-- This selects the single event that is the current state for the key, i.e. the record that represents the current
+-- version of all versioned objects. To do this, the query partitions over current versions of objects from the previous
+-- query and selects the latest. Delete markers are treated specially because they should always be non-current state.
+current_state as (
+    select
+        s3_object_id,
+        sequencer,
+        (
+            row_number() over (
+                partition by
+                    current_versions.bucket,
+                    current_versions.key,
+                    current_versions.is_current_version
+                order by current_versions.sequencer desc nulls last
+            ) = 1 and
+            current_versions.is_current_version and
+            not current_versions.is_delete_marker
+        ) as is_current_state
+    from current_versions
+),
+-- Apply ordering to prevent deadlocks.
+current_state_ordered as (
+    select * from current_state order by current_state.sequencer for update
 )
 update s3_object
-set is_current_state = updated_state
-from to_update
-where s3_object.s3_object_id = to_update.s3_object_id
+set is_current_state = current_state_ordered.is_current_state
+from current_state_ordered
+where s3_object.s3_object_id = current_state_ordered.s3_object_id
 returning s3_object.s3_object_id, s3_object.is_current_state;

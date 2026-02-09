@@ -4,28 +4,34 @@
 use crate::clients::aws::s3::Client as S3Client;
 use crate::clients::aws::sqs::Client as SQSClient;
 use crate::database;
+use crate::database::aws::ingester::Ingester;
 use crate::database::entities::s3_object;
-use crate::database::entities::sea_orm_active_enums::ArchiveStatus;
+use crate::database::entities::sea_orm_active_enums::{ArchiveStatus, Reason};
 use crate::env::Config;
-use crate::error::Error::{S3Error, SQSError, SerdeError};
+use crate::error::Error::{CrawlError, S3Error, SQSError, SerdeError};
 use crate::error::{Error, Result};
 use crate::events::aws::{
-    EventType, FlatS3EventMessage, FlatS3EventMessages, StorageClass, TransposedS3EventMessages,
+    DiffCrawlCreatedMessage, DiffCrawlDeletedMessage, EventType, FlatS3EventMessage,
+    FlatS3EventMessages, StorageClass, TransposedS3EventMessages,
 };
 use crate::events::{Collect, EventSource, EventSourceType};
 use crate::queries::list::ListQueryBuilder;
 use crate::routes::filter::S3ObjectsFilter;
+use crate::routes::filter::wildcard::Wildcard;
 use crate::uuid::UuidGenerator;
 use async_trait::async_trait;
-use aws_sdk_s3::error::BuildError;
+use aws_sdk_s3::error::{BuildError, ProvideErrorMetadata};
 use aws_sdk_s3::operation::get_object_tagging::GetObjectTaggingOutput;
 use aws_sdk_s3::operation::head_object::HeadObjectOutput;
 use aws_sdk_s3::primitives;
 use aws_sdk_s3::types::StorageClass::Standard;
 use aws_sdk_s3::types::{Tag, Tagging};
 use chrono::{DateTime, Utc};
-use futures::future::join_all;
 use futures::TryFutureExt;
+use futures::future::join_all;
+use itertools::Itertools;
+use std::collections::HashSet;
+use std::error;
 use std::str::FromStr;
 use tracing::{trace, warn};
 use uuid::Uuid;
@@ -36,6 +42,8 @@ pub struct CollecterBuilder {
     s3_client: Option<S3Client>,
     sqs_client: Option<SQSClient>,
     sqs_url: Option<String>,
+    crawl_bucket: Option<String>,
+    crawl_prefix: Option<String>,
 }
 
 impl CollecterBuilder {
@@ -56,6 +64,18 @@ impl CollecterBuilder {
         self.set_sqs_url(Some(url))
     }
 
+    /// Set the crawl bucket for crawl-based ingestion.
+    pub fn with_crawl_bucket(mut self, bucket: impl Into<String>) -> Self {
+        self.crawl_bucket = Some(bucket.into());
+        self
+    }
+
+    /// Set the crawl prefix for crawl-based ingestion.
+    pub fn with_crawl_prefix(mut self, prefix: Option<String>) -> Self {
+        self.crawl_prefix = prefix;
+        self
+    }
+
     /// Set the SQS url to build with.
     pub fn set_sqs_url(mut self, url: Option<impl Into<String>>) -> Self {
         self.sqs_url = url.map(|url| url.into());
@@ -70,9 +90,23 @@ impl CollecterBuilder {
         client: &'a database::Client,
     ) -> Collecter<'a> {
         if let Some(s3_client) = self.s3_client {
-            Collecter::new(s3_client, client, raw_events, config)
+            Collecter::new(
+                s3_client,
+                client,
+                raw_events,
+                config,
+                self.crawl_bucket,
+                self.crawl_prefix,
+            )
         } else {
-            Collecter::new(S3Client::with_defaults().await, client, raw_events, config)
+            Collecter::new(
+                S3Client::with_defaults().await,
+                client,
+                raw_events,
+                config,
+                self.crawl_bucket,
+                self.crawl_prefix,
+            )
         }
     }
 
@@ -144,6 +178,8 @@ pub struct Collecter<'a> {
     raw_events: FlatS3EventMessages,
     config: &'a Config,
     n_records: Option<usize>,
+    crawl_bucket: Option<String>,
+    crawl_prefix: Option<String>,
 }
 
 impl<'a> Collecter<'a> {
@@ -153,6 +189,8 @@ impl<'a> Collecter<'a> {
         database_client: &'a database::Client,
         raw_events: FlatS3EventMessages,
         config: &'a Config,
+        crawl_bucket: Option<String>,
+        crawl_prefix: Option<String>,
     ) -> Self {
         Self {
             client,
@@ -160,6 +198,8 @@ impl<'a> Collecter<'a> {
             raw_events,
             config,
             n_records: None,
+            crawl_bucket,
+            crawl_prefix,
         }
     }
 
@@ -171,13 +211,42 @@ impl<'a> Collecter<'a> {
         &'a database::Client,
         FlatS3EventMessages,
         &'a Config,
+        Option<String>,
+        Option<String>,
     ) {
         (
             self.client,
             self.database_client,
             self.raw_events,
             self.config,
+            self.crawl_bucket,
+            self.crawl_prefix,
         )
+    }
+
+    /// Set the S3 client.
+    pub fn set_client(&mut self, client: S3Client) {
+        self.client = client;
+    }
+
+    /// Set the crawl bucket.
+    pub fn set_crawl_bucket(&mut self, bucket: String) {
+        self.crawl_bucket = Some(bucket);
+    }
+
+    /// Set the crawl prefix.
+    pub fn set_crawl_prefix(&mut self, prefix: Option<String>) {
+        self.crawl_prefix = prefix;
+    }
+
+    /// Get the S3 client.
+    pub fn client(&self) -> &S3Client {
+        &self.client
+    }
+
+    /// Set the collecter's raw events.
+    pub fn set_raw_events(&mut self, raw_events: FlatS3EventMessages) {
+        self.raw_events = raw_events;
     }
 
     /// Converts an AWS datetime to a standard database format.
@@ -189,12 +258,29 @@ impl<'a> Collecter<'a> {
         }
     }
 
+    fn warn_except_not_found<T, F>(err: &aws_sdk_s3::error::SdkError<T>, print_warning: F)
+    where
+        T: ProvideErrorMetadata + error::Error + Send + Sync + 'static,
+        F: FnOnce(),
+    {
+        // We are only worried about permission and other errors, if the object cannot be found
+        // that's ok, it was probably deleted.
+        if err.meta().code().is_none_or(|code| code != "NotFound") {
+            print_warning();
+        }
+    }
+
     /// Gets S3 metadata from HeadObject such as creation/archival timestamps and statuses.
     pub async fn head(client: &S3Client, event: FlatS3EventMessage) -> Result<FlatS3EventMessage> {
         let head = client
             .head_object(&event.key, &event.bucket, &event.version_id)
             .inspect_err(|err| {
-                warn!("Error received from HeadObject: {}", err);
+                Self::warn_except_not_found(err, || {
+                    warn!(
+                        "Ingester Warning: {}",
+                        Error::from((err, "HeadObject".to_string()))
+                    )
+                });
             })
             .await
             .ok();
@@ -241,7 +327,12 @@ impl<'a> Collecter<'a> {
         let tagging = client
             .get_object_tagging(&event.key, &event.bucket, &event.version_id)
             .inspect_err(|err| {
-                warn!("Error received from GetObjectTagging: {}", err);
+                Self::warn_except_not_found(err, || {
+                    warn!(
+                        "Ingester Warning: {}",
+                        Error::from((err, "GetObjectTagging".to_string()))
+                    )
+                });
             })
             .await
             .ok();
@@ -279,7 +370,12 @@ impl<'a> Collecter<'a> {
                 )
                 .await
                 .inspect_err(|err| {
-                    warn!("Error received from PutObjectTagging: {}", err);
+                    Self::warn_except_not_found(err, || {
+                        warn!(
+                            "Ingester Warning: {}",
+                            Error::from((err, "PutObjectTagging".to_string()))
+                        )
+                    });
                 });
 
             // Only add a ingest_id to the new record if the tagging was successful.
@@ -290,10 +386,13 @@ impl<'a> Collecter<'a> {
             };
         };
 
-        // The object has a ingest_id tag. Grab the existing the tag, returning a new record without
+        // The object has an ingest_id tag. Grab the existing the tag, returning a new record without
         // the ingest_id if the is not valid.
         let ingest_id = Uuid::from_str(tag.value()).inspect_err(|err| {
-            warn!("Failed to parse ingest_id from tag: {}", err);
+            warn!(
+                "Ingester Warning: Failed to parse ingest_id from tag: {}",
+                err
+            );
         });
         let Ok(ingest_id) = ingest_id else {
             return Ok(event);
@@ -320,9 +419,145 @@ impl<'a> Collecter<'a> {
         if let Some(moved_object) = moved_object {
             Ok(event.with_attributes(moved_object.attributes))
         } else {
-            warn!("Object with ingest_id {} not found in database", ingest_id);
+            warn!(
+                "Ingester Warning: Object with ingest_id {} not found in database",
+                ingest_id
+            );
             Ok(event)
         }
+    }
+
+    /// Updates events that are crawls to take into account the existing database state.
+    pub async fn update_crawl_events(
+        database_client: &database::Client,
+        events: FlatS3EventMessages,
+        crawl_bucket: String,
+        crawl_prefix: Option<String>,
+    ) -> Result<FlatS3EventMessages> {
+        // Get crawl list object details ensuring that all object versions are taken into account.
+        // Note that this fetches non-current objects too in order to crawl old object versions.
+        // This gets the most current record for each object version.
+        let database_state: Vec<FlatS3EventMessage> =
+            ListQueryBuilder::<_, s3_object::Entity>::new(database_client.connection_ref())
+                .filter_all(
+                    S3ObjectsFilter {
+                        bucket: Wildcard::new(crawl_bucket).into(),
+                        key: Wildcard::new(format!("{}{}", crawl_prefix.unwrap_or_default(), "*"))
+                            .into(),
+                        ..Default::default()
+                    },
+                    true,
+                    false,
+                )?
+                .all()
+                .await?
+                .into_iter()
+                .map(FlatS3EventMessage::from)
+                .filter(|object| object.event_type == EventType::Created)
+                .chunk_by(|object| format!("{}{}{}", object.bucket, object.key, object.version_id))
+                .into_iter()
+                .map(|(_, objects)| {
+                    FlatS3EventMessages(objects.collect_vec())
+                        .sort()
+                        .0
+                        .into_iter()
+                        .last()
+                        .ok_or_else(|| CrawlError("expected at least one element".to_string()))
+                })
+                .collect::<Result<_>>()?;
+
+        // The difference keeps the records that need to be deleted from the database.
+        // All new crawl events should be appended to the database, this could have efficiency
+        // improved to ignore updates where the crawl event is exactly the same as the database state
+        let s3_state: HashSet<DiffCrawlCreatedMessage> =
+            HashSet::from_iter(Vec::<DiffCrawlCreatedMessage>::from(events));
+        let database_state: HashSet<DiffCrawlCreatedMessage> =
+            HashSet::from_iter(Vec::<DiffCrawlCreatedMessage>::from(FlatS3EventMessages(
+                database_state,
+            )));
+
+        // Records with null sequencers need to be treated specially, because they should always
+        // trigger an update in the database, in order to remove the null sequencer. First, find
+        // the records that have null sequencers, and then remove them from the diff comparison
+        // so that they can always be updated.
+        let (null_sequencer, mut database_state): (HashSet<_>, HashSet<_>) = database_state
+            .into_iter()
+            .partition(|state| state.0.sequencer.is_none());
+        let mut null_sequencer = null_sequencer.into_iter().collect_vec();
+        let (always_update, s3_state): (HashSet<_>, HashSet<_>) =
+            s3_state.into_iter().partition(|state| {
+                match null_sequencer.iter().position(|database| {
+                    database.0.key == state.0.key
+                        && database.0.bucket == state.0.bucket
+                        && database.0.version_id == state.0.version_id
+                }) {
+                    Some(database) => {
+                        // Remove elements that are found because any remaining null sequencers
+                        // represent deleted objects that need to go back into the comparison.
+                        null_sequencer.swap_remove(database);
+                        true
+                    }
+                    None => false,
+                }
+            });
+
+        // Re-increment the sequencer for current state events in order to avoid issues with
+        // duplicate sequencer values across object versions.
+        let always_update = always_update
+            .into_iter()
+            .map(|mut event| {
+                if event.0.is_current_state {
+                    let new_sequencer = Ingester::increment_sequencer(None)
+                        .and_then(|sequencer| Ingester::increment_sequencer(Some(sequencer)))?;
+                    event.0.sequencer = Some(new_sequencer);
+                }
+                Ok(event)
+            })
+            .collect::<Result<HashSet<_>>>()?;
+
+        // Return remaining objects back to the database state for delete comparison.
+        database_state.extend(null_sequencer);
+
+        // The state in S3 minus the state in the database represents new records that should be
+        // inserted.
+        let diff_created = s3_state.difference(&database_state).cloned().collect_vec();
+        // All records that are not in the crawl, but are in the database represent records that
+        // should be deleted from the database. This is represented by the difference between the
+        // database state and the crawl state.
+        let diff_deleted = HashSet::<DiffCrawlDeletedMessage>::from_iter(
+            database_state
+                .into_iter()
+                .map(DiffCrawlDeletedMessage::from),
+        )
+        .difference(&HashSet::from_iter(
+            s3_state.into_iter().map(DiffCrawlDeletedMessage::from),
+        ))
+        .cloned()
+        .map(|mut record| {
+            // Update these to deleted events, as these should be removed from the database.
+            record.0.is_current_state = false;
+            record.0.event_type = EventType::Deleted;
+            // This needs to be like a crawl event, so the s3 object id, sequencer, time and reason
+            // should be refreshed.
+            record.0.s3_object_id = UuidGenerator::generate();
+            record.0.event_time = Some(Utc::now());
+            record.0.sequencer = None;
+            record.0.reason = Reason::Crawl;
+            record
+        })
+        .collect_vec();
+
+        let diff = [
+            always_update.into_iter().collect_vec(),
+            diff_created,
+            diff_deleted
+                .into_iter()
+                .map(DiffCrawlCreatedMessage::from)
+                .collect_vec(),
+        ]
+        .concat();
+
+        Ok(FlatS3EventMessages::from(diff))
     }
 
     /// Process events and add header and datetime fields.
@@ -331,8 +566,10 @@ impl<'a> Collecter<'a> {
         client: &S3Client,
         database_client: &database::Client,
         events: FlatS3EventMessages,
+        crawl_bucket: Option<String>,
+        crawl_prefix: Option<String>,
     ) -> Result<FlatS3EventMessages> {
-        Ok(FlatS3EventMessages(
+        let events = FlatS3EventMessages(
             join_all(events.into_inner().into_iter().map(|event| async move {
                 // No need to run this unnecessarily on removed events.
                 match event.event_type {
@@ -348,7 +585,13 @@ impl<'a> Collecter<'a> {
             .await
             .into_iter()
             .collect::<Result<Vec<FlatS3EventMessage>>>()?,
-        ))
+        );
+
+        if let Some(crawl_bucket) = crawl_bucket {
+            Self::update_crawl_events(database_client, events, crawl_bucket, crawl_prefix).await
+        } else {
+            Ok(events)
+        }
     }
 
     /// Get the number of records processed.
@@ -366,11 +609,20 @@ impl From<BuildError> for Error {
 #[async_trait]
 impl Collect for Collecter<'_> {
     async fn collect(mut self) -> Result<EventSource> {
-        let (client, database_client, events, config) = self.into_inner();
+        let (client, database_client, events, config, crawl_bucket, crawl_prefix) =
+            self.into_inner();
 
         let events = events.sort_and_dedup();
 
-        let events = Self::update_events(config, &client, database_client, events).await?;
+        let events = Self::update_events(
+            config,
+            &client,
+            database_client,
+            events,
+            crawl_bucket,
+            crawl_prefix,
+        )
+        .await?;
         // Get only the known event types.
         let events = events.filter_known();
         let n_records = events.0.len();
@@ -391,16 +643,16 @@ impl Collect for Collecter<'_> {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use aws_smithy_mocks::mock;
     use aws_smithy_mocks::Rule;
     use aws_smithy_mocks::RuleMode;
+    use aws_smithy_mocks::mock;
 
     use crate::database::aws::migration::tests::MIGRATOR;
-    use crate::events::aws::tests::{
-        expected_event_record_simple, expected_flat_events_simple, EXPECTED_SHA256,
-        EXPECTED_VERSION_ID,
-    };
     use crate::events::aws::StorageClass::IntelligentTiering;
+    use crate::events::aws::tests::{
+        EXPECTED_SHA256, EXPECTED_VERSION_ID, expected_event_record_simple,
+        expected_flat_events_simple,
+    };
 
     use aws_sdk_s3::operation::get_object_tagging::GetObjectTaggingError;
     use aws_sdk_s3::operation::head_object::HeadObjectError;
@@ -408,6 +660,7 @@ pub(crate) mod tests {
 
     use aws_sdk_s3::primitives::DateTimeFormat;
     use aws_sdk_s3::types;
+    use aws_sdk_s3::types::builders::TagBuilder;
     use aws_sdk_s3::types::error::NotFound;
     use aws_sdk_sqs::operation::receive_message::ReceiveMessageOutput;
     use aws_sdk_sqs::types::builders::MessageBuilder;
@@ -418,8 +671,8 @@ pub(crate) mod tests {
 
     use super::*;
     use crate::database::{Client, Ingest};
-    use crate::events::aws::message::default_version_id;
     use crate::events::aws::message::EventType::Created;
+    use crate::events::aws::message::default_version_id;
     use crate::handlers::aws::tests::s3_object_results;
     use crate::queries::EntriesBuilder;
 
@@ -480,6 +733,7 @@ pub(crate) mod tests {
         let mut collecter = test_collecter(&config, &client).await;
 
         collecter.client = mock_s3(&[head_expectation(
+            "key".to_string(),
             default_version_id(),
             expected_head_object(),
         )]);
@@ -531,11 +785,12 @@ pub(crate) mod tests {
 
         collecter.client = s3_client_expectations();
 
-        let mut result = Collecter::update_events(&config, &collecter.client, &client, events)
-            .await
-            .unwrap()
-            .into_inner()
-            .into_iter();
+        let mut result =
+            Collecter::update_events(&config, &collecter.client, &client, events, None, None)
+                .await
+                .unwrap()
+                .into_inner()
+                .into_iter();
 
         let first = result.next().unwrap();
         assert_eq!(first.storage_class, Some(IntelligentTiering));
@@ -553,7 +808,7 @@ pub(crate) mod tests {
         let mut collecter = test_collecter(&config, &client).await;
 
         collecter.raw_events = FlatS3EventMessages(vec![
-            expected_s3_event_message().with_version_id(EXPECTED_VERSION_ID.to_string())
+            expected_s3_event_message().with_version_id(EXPECTED_VERSION_ID.to_string()),
         ]);
         collecter.client = s3_client_expectations();
 
@@ -567,9 +822,11 @@ pub(crate) mod tests {
 
         let s3_object_results = s3_object_results(&pool).await;
         assert_eq!(s3_object_results.len(), 1);
-        assert!(s3_object_results[0]
-            .get::<Option<Uuid>, _>("ingest_id")
-            .is_some());
+        assert!(
+            s3_object_results[0]
+                .get::<Option<Uuid>, _>("ingest_id")
+                .is_some()
+        );
     }
 
     #[sqlx::test(migrator = "MIGRATOR")]
@@ -587,18 +844,25 @@ pub(crate) mod tests {
             .unwrap();
 
         collecter.raw_events = FlatS3EventMessages(vec![
-            expected_s3_event_message().with_version_id(default_version_id())
+            expected_s3_event_message().with_version_id(default_version_id()),
         ]);
         collecter.client = mock_s3(&[
-            head_expectation(default_version_id(), expected_head_object()),
+            head_expectation(
+                "key".to_string(),
+                default_version_id(),
+                expected_head_object(),
+            ),
             get_tagging_expectation(
+                "key".to_string(),
                 default_version_id(),
                 GetObjectTaggingOutput::builder()
-                    .set_tag_set(Some(vec![Tag::builder()
-                        .key("ingest_id")
-                        .value(ingest_id.to_string())
-                        .build()
-                        .unwrap()]))
+                    .set_tag_set(Some(vec![
+                        Tag::builder()
+                            .key("ingest_id")
+                            .value(ingest_id.to_string())
+                            .build()
+                            .unwrap(),
+                    ]))
                     .build()
                     .unwrap(),
             ),
@@ -646,11 +910,15 @@ pub(crate) mod tests {
         let mut collecter = test_collecter(&config, &client).await;
 
         collecter.raw_events = FlatS3EventMessages(vec![
-            expected_s3_event_message().with_version_id(default_version_id())
+            expected_s3_event_message().with_version_id(default_version_id()),
         ]);
 
         collecter.client = mock_s3(&[
-            head_expectation(default_version_id(), expected_head_object()),
+            head_expectation(
+                "key".to_string(),
+                default_version_id(),
+                expected_head_object(),
+            ),
             mock!(aws_sdk_s3::Client::get_object_tagging)
                 .match_requests(move |req| {
                     req.key() == Some("key")
@@ -670,9 +938,11 @@ pub(crate) mod tests {
 
         let s3_object_results = s3_object_results(&pool).await;
         assert_eq!(s3_object_results.len(), 1);
-        assert!(s3_object_results[0]
-            .get::<Option<Uuid>, _>("ingest_id")
-            .is_none());
+        assert!(
+            s3_object_results[0]
+                .get::<Option<Uuid>, _>("ingest_id")
+                .is_none()
+        );
     }
 
     #[sqlx::test(migrator = "MIGRATOR")]
@@ -707,10 +977,14 @@ pub(crate) mod tests {
         }
     }
 
-    pub(crate) fn head_expectation(version_id: String, output: HeadObjectOutput) -> Rule {
+    pub(crate) fn head_expectation(
+        key: String,
+        version_id: String,
+        output: HeadObjectOutput,
+    ) -> Rule {
         mock!(aws_sdk_s3::Client::head_object)
             .match_requests(move |req| {
-                req.key() == Some("key")
+                req.key() == Some(&key)
                     && req.bucket() == Some("bucket")
                     && ((version_id != default_version_id()
                         && req.version_id() == Some(&version_id.to_string()))
@@ -720,12 +994,13 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn put_tagging_expectation(
+        key: String,
         version_id: String,
         output: PutObjectTaggingOutput,
     ) -> Rule {
         mock!(aws_sdk_s3::Client::put_object_tagging)
             .match_requests(move |req| {
-                req.key() == Some("key")
+                req.key() == Some(&key)
                     && req.bucket() == Some("bucket")
                     && ((version_id != default_version_id()
                         && req.version_id() == Some(&version_id.to_string()))
@@ -738,12 +1013,13 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn get_tagging_expectation(
+        key: String,
         version_id: String,
         output: GetObjectTaggingOutput,
     ) -> Rule {
         mock!(aws_sdk_s3::Client::get_object_tagging)
             .match_requests(move |req| {
-                req.key() == Some("key")
+                req.key() == Some(&key)
                     && req.bucket() == Some("bucket")
                     && ((version_id != default_version_id()
                         && req.version_id() == Some(&version_id.to_string()))
@@ -778,9 +1054,21 @@ pub(crate) mod tests {
             .build()
     }
 
-    pub(crate) fn expected_get_object_tagging() -> GetObjectTaggingOutput {
+    pub(crate) fn expected_get_object_tagging(ingest_id: Option<Uuid>) -> GetObjectTaggingOutput {
         GetObjectTaggingOutput::builder()
-            .set_tag_set(Some(vec![]))
+            .set_tag_set(Some(
+                ingest_id
+                    .map(|id| {
+                        vec![
+                            TagBuilder::default()
+                                .key("ingest_id")
+                                .value(id.to_string())
+                                .build()
+                                .unwrap(),
+                        ]
+                    })
+                    .unwrap_or_default(),
+            ))
             .build()
             .unwrap()
     }
@@ -791,14 +1079,20 @@ pub(crate) mod tests {
 
     pub(crate) fn s3_client_expectations() -> S3Client {
         mock_s3(&[
-            head_expectation(EXPECTED_VERSION_ID.to_string(), expected_head_object()),
+            head_expectation(
+                "key".to_string(),
+                EXPECTED_VERSION_ID.to_string(),
+                expected_head_object(),
+            ),
             put_tagging_expectation(
+                "key".to_string(),
                 EXPECTED_VERSION_ID.to_string(),
                 expected_put_object_tagging(),
             ),
             get_tagging_expectation(
+                "key".to_string(),
                 EXPECTED_VERSION_ID.to_string(),
-                expected_get_object_tagging(),
+                expected_get_object_tagging(None),
             ),
         ])
     }
@@ -811,12 +1105,17 @@ pub(crate) mod tests {
         HeadObjectError::NotFound(NotFound::builder().build())
     }
 
-    async fn test_collecter<'a>(config: &'a Config, database_client: &'a Client) -> Collecter<'a> {
+    pub(crate) async fn test_collecter<'a>(
+        config: &'a Config,
+        database_client: &'a Client,
+    ) -> Collecter<'a> {
         Collecter::new(
             mock_s3(&[]),
             database_client,
             expected_flat_events_simple(),
             config,
+            None,
+            None,
         )
     }
 

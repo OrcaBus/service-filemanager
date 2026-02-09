@@ -115,7 +115,7 @@ export class Function extends Construct {
           cargoLambdaFlags: ['--compiler', 'cargo'],
         }),
       },
-      memorySize: 128,
+      memorySize: 1024,
       timeout: props.timeout ?? Duration.seconds(28),
       environment: {
         // No password here, using RDS IAM to generate credentials.
@@ -167,9 +167,7 @@ export class Function extends Construct {
    * Add policies for 's3:List*' and 's3:Get*' on the buckets to this function's role.
    */
   addPoliciesForBuckets(buckets: string[], actions: string[]) {
-    Function.formatPoliciesForBucket(buckets, actions).forEach((policy) => {
-      this.addToPolicy(policy);
-    });
+    this.addToPolicy(Function.formatPoliciesForBucket(buckets, actions));
   }
 
   /**
@@ -189,12 +187,12 @@ export class Function extends Construct {
   /**
    * Format a set of buckets and actions into policy statements.
    */
-  static formatPoliciesForBucket(buckets: string[], actions: string[]): PolicyStatement[] {
-    return buckets.map((bucket) => {
-      return new PolicyStatement({
-        actions,
-        resources: [`arn:aws:s3:::${bucket}`, `arn:aws:s3:::${bucket}/*`],
-      });
+  static formatPoliciesForBucket(buckets: string[], actions: string[]): PolicyStatement {
+    return new PolicyStatement({
+      actions,
+      resources: buckets.flatMap((bucket) => {
+        return [`arn:aws:s3:::${bucket}`, `arn:aws:s3:::${bucket}/*`];
+      }),
     });
   }
 

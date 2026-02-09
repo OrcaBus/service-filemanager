@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 use std::ops::Add;
 
+use crate::database::Client;
 use crate::database::aws::ingester::Ingester;
 use crate::database::entities::s3_crawl::ActiveModel as ActiveS3Crawl;
 use crate::database::entities::s3_crawl::Model as S3Crawl;
@@ -12,10 +13,9 @@ use crate::database::entities::s3_object::Model as S3Object;
 use crate::database::entities::sea_orm_active_enums::{
     ArchiveStatus, CrawlStatus, EventType, Reason, StorageClass,
 };
-use crate::database::Client;
 use crate::error::Result;
 use crate::events::aws;
-use crate::events::aws::{message, FlatS3EventMessage, FlatS3EventMessages};
+use crate::events::aws::{FlatS3EventMessage, FlatS3EventMessages, message};
 use crate::uuid::UuidGenerator;
 use chrono::{DateTime, Days};
 use rand::rng;

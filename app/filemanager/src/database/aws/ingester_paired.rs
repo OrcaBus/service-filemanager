@@ -190,11 +190,13 @@ pub(crate) mod tests {
     use crate::database::aws::ingester::tests::update_test_events;
     use crate::database::aws::migration::tests::MIGRATOR;
     use crate::database::{Client, Ingest};
-    use crate::events::aws::message::default_version_id;
+    use crate::events::EventSourceType;
+    use crate::events::EventSourceType::S3Paired;
     use crate::events::aws::message::EventType::{Created, Deleted};
+    use crate::events::aws::message::default_version_id;
     use crate::events::aws::tests::{
-        expected_event_record_simple, expected_flat_events, expected_flat_events_simple,
-        EXPECTED_QUOTED_E_TAG,
+        EXPECTED_QUOTED_E_TAG, expected_event_record_simple, expected_flat_events,
+        expected_flat_events_simple,
     };
     use crate::events::aws::tests::{
         EXPECTED_SEQUENCER_CREATED_ONE, EXPECTED_SEQUENCER_CREATED_ZERO,
@@ -202,8 +204,6 @@ pub(crate) mod tests {
         EXPECTED_VERSION_ID,
     };
     use crate::events::aws::{Events, FlatS3EventMessage, FlatS3EventMessages};
-    use crate::events::EventSourceType;
-    use crate::events::EventSourceType::S3Paired;
     use chrono::{DateTime, Utc};
     use itertools::Itertools;
     use sqlx::postgres::PgRow;
@@ -221,9 +221,11 @@ pub(crate) mod tests {
         let s3_object_results = fetch_results(&ingester).await;
 
         assert_eq!(s3_object_results.len(), 1);
-        assert!(s3_object_results[0]
-            .get::<Option<Uuid>, _>("ingest_id")
-            .is_some());
+        assert!(
+            s3_object_results[0]
+                .get::<Option<Uuid>, _>("ingest_id")
+                .is_some()
+        );
         assert_created(&s3_object_results[0]);
     }
 
@@ -275,9 +277,11 @@ pub(crate) mod tests {
         let s3_object_results = fetch_results(&ingester).await;
 
         assert_eq!(s3_object_results.len(), 1);
-        assert!(s3_object_results[0]
-            .get::<Option<Uuid>, _>("ingest_id")
-            .is_some());
+        assert!(
+            s3_object_results[0]
+                .get::<Option<Uuid>, _>("ingest_id")
+                .is_some()
+        );
         assert_with(
             &s3_object_results[0],
             Some(i64::MAX),
@@ -315,9 +319,11 @@ pub(crate) mod tests {
         let s3_object_results = fetch_results(&ingester).await;
 
         assert_eq!(s3_object_results.len(), 1);
-        assert!(s3_object_results[0]
-            .get::<Option<Uuid>, _>("ingest_id")
-            .is_some());
+        assert!(
+            s3_object_results[0]
+                .get::<Option<Uuid>, _>("ingest_id")
+                .is_some()
+        );
         assert_ingest_events(&s3_object_results[0], EXPECTED_VERSION_ID);
     }
 
@@ -336,9 +342,11 @@ pub(crate) mod tests {
         let s3_object_results = fetch_results(&ingester).await;
 
         assert_eq!(s3_object_results.len(), 1);
-        assert!(s3_object_results[0]
-            .get::<Option<Uuid>, _>("ingest_id")
-            .is_some());
+        assert!(
+            s3_object_results[0]
+                .get::<Option<Uuid>, _>("ingest_id")
+                .is_some()
+        );
         assert_eq!(
             2,
             s3_object_results[0].get::<i64, _>("number_duplicate_events")
@@ -464,9 +472,11 @@ pub(crate) mod tests {
         let s3_object_results = fetch_results(&ingester).await;
 
         assert_eq!(s3_object_results.len(), 1);
-        assert!(s3_object_results[0]
-            .get::<Option<Uuid>, _>("ingest_id")
-            .is_some());
+        assert!(
+            s3_object_results[0]
+                .get::<Option<Uuid>, _>("ingest_id")
+                .is_some()
+        );
         assert_eq!(2, s3_object_results[0].get::<i64, _>("number_reordered"));
         assert_ingest_events(&s3_object_results[0], EXPECTED_VERSION_ID);
     }

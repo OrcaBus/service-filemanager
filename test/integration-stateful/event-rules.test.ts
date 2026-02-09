@@ -2,42 +2,13 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/dot-notation */
 
-import { Match, Template } from 'aws-cdk-lib/assertions';
 import { EventBridge } from '@aws-sdk/client-eventbridge';
-import { getFileManagerStatefulProps } from '../infrastructure/stage/config';
-import { FileManagerStatefulStack } from '../infrastructure/stage/filemanager-stateful-stack';
 import { App } from 'aws-cdk-lib';
-import { FILEMANAGER_INGEST_QUEUE } from '../infrastructure/stage/constants';
+import { FileManagerStatefulStack } from '../../infrastructure/stage/filemanager-stateful-stack';
+import { getFileManagerStatefulProps } from '../../infrastructure/stage/config';
+import { Template } from 'aws-cdk-lib/assertions';
 
 let eventbridge: EventBridge;
-
-function assertCommon(template: Template) {
-  template.resourceCountIs('AWS::SQS::Queue', 2);
-
-  template.hasResourceProperties('AWS::SQS::Queue', {
-    QueueName: FILEMANAGER_INGEST_QUEUE,
-    RedrivePolicy: {
-      deadLetterTargetArn: Match.anyValue(),
-    },
-  });
-
-  template.hasResourceProperties('AWS::CloudWatch::Alarm', {
-    ComparisonOperator: 'GreaterThanThreshold',
-    EvaluationPeriods: 1,
-    Threshold: 0,
-  });
-
-  template.hasResourceProperties('AWS::Events::Rule', {
-    EventPattern: {
-      source: ['aws.s3'],
-      detail: {
-        bucket: {
-          name: ['bucket'],
-        },
-      },
-    },
-  });
-}
 
 /**
  * Test the event against the pattern.
@@ -84,6 +55,48 @@ beforeEach(() => {
   eventbridge = new EventBridge();
 });
 
+async function testIapUploadTest(event: any, pattern: any) {
+  event['detail']['object']['key'] = 'byob-icav2/.iap_upload_test.tmp';
+  event['detail']['object']['size'] = 0;
+  expect(await testEventPattern(event, pattern)).toBe(false);
+
+  event['detail']['object']['key'] = 'byob-icav2/.iap_upload_test.tmp';
+  event['detail']['object']['size'] = 1;
+  expect(await testEventPattern(event, pattern)).toBe(false);
+
+  event['detail']['object']['key'] = 'testdata/.iap_upload_test.tmp';
+  event['detail']['object']['size'] = 0;
+  expect(await testEventPattern(event, pattern)).toBe(false);
+
+  event['detail']['object']['key'] = 'testdata/.iap_upload_test.tmp';
+  event['detail']['object']['size'] = 1;
+  expect(await testEventPattern(event, pattern)).toBe(false);
+
+  event['detail']['object']['key'] = 'byob-icav2/.iap_upload_test.tmp/example';
+  event['detail']['object']['size'] = 1;
+  expect(await testEventPattern(event, pattern)).toBe(true);
+
+  event['detail']['object']['key'] = 'byob-icav2/.iap_upload_test.tmp/';
+  event['detail']['object']['size'] = 1;
+  expect(await testEventPattern(event, pattern)).toBe(true);
+
+  event['detail']['object']['key'] = 'byob-icav2/.iap_upload_test.tmp/example';
+  event['detail']['object']['size'] = 0;
+  expect(await testEventPattern(event, pattern)).toBe(true);
+
+  event['detail']['object']['key'] = 'byob-icav2/.iap_upload_test.tmp/';
+  event['detail']['object']['size'] = 0;
+  expect(await testEventPattern(event, pattern)).toBe(false);
+
+  event['detail']['object']['key'] = 'testdata/.iap_upload_test.tmp/example';
+  event['detail']['object']['size'] = 0;
+  expect(await testEventPattern(event, pattern)).toBe(true);
+
+  event['detail']['object']['key'] = 'testdata/.iap_upload_test.tmp/';
+  event['detail']['object']['size'] = 0;
+  expect(await testEventPattern(event, pattern)).toBe(false);
+}
+
 async function testDirectoryObjects(event: any, pattern: any) {
   event['detail']['object']['key'] = 'example-key/';
   event['detail']['object']['size'] = 0;
@@ -126,9 +139,17 @@ async function testCacheObjects(event: any, pattern: any) {
   event['detail']['object']['key'] = 'byob-icav2/123/cache/123/';
   event['detail']['object']['size'] = 1;
   expect(await testEventPattern(event, pattern)).toBe(false);
+
+  event['detail']['object']['key'] = 'byob-icav2/123/123/cache';
+  event['detail']['object']['size'] = 1;
+  expect(await testEventPattern(event, pattern)).toBe(true);
+
+  event['detail']['object']['key'] = 'byob-icav2/cache/123/123';
+  event['detail']['object']['size'] = 1;
+  expect(await testEventPattern(event, pattern)).toBe(true);
 }
 
-test.skip('Test event source event patterns', async () => {
+test('Test event source event patterns', async () => {
   const app = new App({});
   const stack = new FileManagerStatefulStack(
     app,
@@ -142,114 +163,11 @@ test.skip('Test event source event patterns', async () => {
     const eventPattern = pattern[1]['Properties']['EventPattern'];
     const bucket = eventPattern['detail']['bucket']['name'][0] as string;
     const event = testS3Event(bucket, 'example-key', 1);
+    await testIapUploadTest(event, eventPattern);
     await testDirectoryObjects(event, eventPattern);
 
     if (JSON.stringify(eventPattern['detail']['object']).includes('cache')) {
       await testCacheObjects(event, eventPattern);
     }
   }
-});
-
-test('Test stateful created props', () => {
-  const app = new App({});
-  const stack = new FileManagerStatefulStack(app, 'TestFilemanagerStatefulStack', {
-    env: {
-      account: '123456789',
-      region: 'ap-southeast-2',
-    },
-    accessKeyProps: {
-      secretName: 'secret', // pragma: allowlist secret
-      userName: 'username',
-      policies: [],
-    },
-    rules: [
-      {
-        bucket: 'bucket',
-      },
-    ],
-  });
-  const template = Template.fromStack(stack);
-
-  assertCommon(template);
-});
-
-test('Test stateful created props with event types', () => {
-  const app = new App({});
-  const stack = new FileManagerStatefulStack(app, 'TestFilemanagerStatefulStack', {
-    accessKeyProps: {
-      secretName: 'secret', // pragma: allowlist secret
-      userName: 'username',
-      policies: [],
-    },
-    rules: [
-      {
-        bucket: 'bucket',
-        eventTypes: ['Object Created'],
-      },
-    ],
-  });
-  const template = Template.fromStack(stack);
-
-  assertCommon(template);
-  template.hasResourceProperties('AWS::Events::Rule', {
-    EventPattern: {
-      'detail-type': ['Object Created'],
-    },
-  });
-});
-
-test('Test stateful created props with key rule', () => {
-  const app = new App({});
-  const stack = new FileManagerStatefulStack(app, 'TestFilemanagerStatefulStack', {
-    accessKeyProps: {
-      secretName: 'secret', // pragma: allowlist secret
-      userName: 'username',
-      policies: [],
-    },
-    rules: [
-      {
-        bucket: 'bucket',
-        patterns: { key: [{ 'anything-but': { wildcard: 'wildcard/*' } }, { prefix: 'prefix' }] },
-      },
-    ],
-  });
-  const template = Template.fromStack(stack);
-
-  assertCommon(template);
-  template.hasResourceProperties('AWS::Events::Rule', {
-    EventPattern: {
-      detail: {
-        object: {
-          key: [
-            {
-              'anything-but': { wildcard: 'wildcard/*' },
-            },
-            {
-              prefix: 'prefix',
-            },
-          ],
-        },
-      },
-    },
-  });
-});
-
-test('Test stateful created props with rules matching any bucket', () => {
-  const app = new App({});
-  const stack = new FileManagerStatefulStack(app, 'TestFilemanagerStatefulStack', {
-    accessKeyProps: {
-      secretName: 'secret', // pragma: allowlist secret
-      userName: 'username',
-      policies: [],
-    },
-    rules: [{}],
-  });
-  const template = Template.fromStack(stack);
-
-  template.hasResourceProperties('AWS::Events::Rule', {
-    EventPattern: {
-      source: ['aws.s3'],
-      detail: {},
-    },
-  });
-});
+}, 30000);

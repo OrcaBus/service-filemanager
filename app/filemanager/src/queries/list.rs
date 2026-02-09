@@ -538,24 +538,24 @@ impl JsonPathBuilder {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use sea_orm::DatabaseConnection;
     use sea_orm::prelude::Json;
+    use sea_orm::sea_query::IntoColumnRef;
     use sea_orm::sea_query::extension::postgres::PgBinOper;
     use sea_orm::sea_query::types::BinOper;
-    use sea_orm::sea_query::IntoColumnRef;
-    use sea_orm::DatabaseConnection;
     use serde_json::json;
     use sqlx::PgPool;
     use std::collections::HashMap;
 
+    use crate::database::Client;
     use crate::database::aws::migration::tests::MIGRATOR;
     use crate::database::entities::s3_crawl::Model;
     use crate::database::entities::s3_object::Entity;
     use crate::database::entities::sea_orm_active_enums::{
         ArchiveStatus, EventType, Reason, StorageClass,
     };
-    use crate::database::Client;
-    use crate::queries::update::tests::{change_many, entries_many, null_attributes};
     use crate::queries::EntriesBuilder;
+    use crate::queries::update::tests::{change_many, entries_many, null_attributes};
     use crate::routes::filter::wildcard::Wildcard;
     use crate::routes::pagination::Links;
 
@@ -811,7 +811,7 @@ pub(crate) mod tests {
         assert_eq!(result, vec![expected]);
     }
 
-    fn builder_is_accessible(client: &Client) -> ListQueryBuilder<DatabaseConnection, Entity> {
+    fn builder_is_accessible(client: &Client) -> ListQueryBuilder<'_, DatabaseConnection, Entity> {
         ListQueryBuilder::<_, s3_object::Entity>::new(client.connection_ref())
             .filter_all(
                 S3ObjectsFilter {
@@ -1309,8 +1309,10 @@ pub(crate) mod tests {
             true,
         )
         .unwrap();
-        assert!(condition_to_string(conditions)
-            .contains(r#""attributes" @? CAST(E'$.attributeId ? (@ == \"1\")"#));
+        assert!(
+            condition_to_string(conditions)
+                .contains(r#""attributes" @? CAST(E'$.attributeId ? (@ == \"1\")"#)
+        );
 
         let conditions = JsonPathBuilder::json_condition(
             s3_object::Column::Attributes.into_column_ref(),
@@ -1318,8 +1320,10 @@ pub(crate) mod tests {
             true,
         )
         .unwrap();
-        assert!(condition_to_string(conditions)
-            .contains(r#""attributes" @? CAST(E'$.attributeId ? (@ like_regex \"a.*\")"#));
+        assert!(
+            condition_to_string(conditions)
+                .contains(r#""attributes" @? CAST(E'$.attributeId ? (@ like_regex \"a.*\")"#)
+        );
 
         let conditions = JsonPathBuilder::json_condition(
             s3_object::Column::Attributes.into_column_ref(),
@@ -1337,8 +1341,10 @@ pub(crate) mod tests {
             true,
         )
         .unwrap();
-        assert!(condition_to_string(conditions)
-            .contains(r#""attributes" @? CAST(E'$.attributeId.nested ? (@ == \"1\")"#));
+        assert!(
+            condition_to_string(conditions)
+                .contains(r#""attributes" @? CAST(E'$.attributeId.nested ? (@ == \"1\")"#)
+        );
 
         let conditions = JsonPathBuilder::json_condition(
             s3_object::Column::Attributes.into_column_ref(),

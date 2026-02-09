@@ -38,7 +38,7 @@ strum = { version = "0.27", features = ["derive"] }
 
 # Query server
 axum = { version = "0.8", features = ["original-uri"] }
-axum-extra = "0.10"
+axum-extra = { version = "0.12", features = ["with-rejection"] }
 utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid", "url"] }
 utoipa-swagger-ui = { version = "9", features = ["axum", "debug-embed", "url"] }
 tower = { version = "0.5", features = ["util"] }
@@ -58,34 +58,34 @@ parse-size = "1"
 humantime = "2"
 percent-encoding = "2"
 base64 = "0.22"
-reqwest = { version = "0.12", features = ["rustls-tls"], default-features = false }
+reqwest = { version = "0.13", features = ["rustls"], default-features = false }
 
 # Inventory
 csv = "1"
 flate2 = "1"
-md5 = "0.7"
+md5 = "0.8"
 hex = "0.4"
-parquet = { version = "53", features = ["async"] }
-arrow = { version = "53", features = ["chrono-tz"] }
-arrow-json = "53"
-orc-rust = "0.6"
+parquet = { version = "57", features = ["async"] }
+arrow = { version = "57", features = ["chrono-tz"] }
+arrow-json = "57"
+orc-rust = "0.7"
 
 # AWS
 aws-sdk-sqs = "1"
 aws-config = "1"
-aws-sdk-s3 = "1"
+aws-sdk-s3 = { version = "1" }
 aws-credential-types = "1"
 aws-sigv4 = "1"
 aws-arn = "0.3"
-aws_lambda_events = "0.16"
+aws_lambda_events = "1"
 aws-sdk-secretsmanager = "1"
-aws_secretsmanager_caching = "1"
+aws_secretsmanager_caching = "2"
 
 [dev-dependencies]
 lazy_static = "1"
 
-aws-smithy-runtime-api = "1"
-aws-smithy-mocks = "0.1"
+aws-smithy-runtime-api = { version = "1", features = ["test-util"] }
+aws-smithy-mocks = "0.2"
 aws-sdk-s3 = { version = "1", features = ["test-util"] }
 aws-sdk-sqs = { version = "1", features = ["test-util"] }
 aws-sdk-secretsmanager = { version = "1", features = ["test-util"] }

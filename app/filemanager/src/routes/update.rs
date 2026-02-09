@@ -5,14 +5,14 @@ use crate::env::Config;
 use crate::error::Error::{ExpectedSomeValue, QueryError};
 use crate::error::{Error, Result};
 use crate::queries::update::UpdateQueryBuilder;
+use crate::routes::AppState;
 use crate::routes::error::{ErrorStatusCode, Json, Path, QsQuery, Query};
 use crate::routes::filter::S3ObjectsFilter;
 use crate::routes::list::{ListS3Params, WildcardParams};
-use crate::routes::AppState;
 use aws_sdk_s3::types::{Tag, Tagging};
 use axum::extract::State;
 use axum::routing::patch;
-use axum::{extract, Router};
+use axum::{Router, extract};
 use axum_extra::extract::WithRejection;
 use json_patch::PatchOperation;
 use sea_orm::TransactionTrait;
@@ -141,10 +141,7 @@ impl PatchBody {
                 QueryError("expected string value for `ingestId` update".to_string())
             })?)
             .map_err(|err| {
-                QueryError(format!(
-                    "failed to parse UUID for `ingestId` update: {}",
-                    err
-                ))
+                QueryError(format!("failed to parse UUID for `ingestId` update: {err}"))
             })?;
 
             Ok::<_, Error>(uuid)
@@ -158,7 +155,7 @@ impl PatchBody {
                 return Err(QueryError(
                     "expected `add`, `remove` or `replace` operation for `ingestId` update"
                         .to_string(),
-                ))
+                ));
             }
         };
 
@@ -315,19 +312,19 @@ pub fn update_router() -> Router<AppState> {
 mod tests {
     use axum::body::Body;
     use axum::http::{Method, StatusCode};
-    use serde_json::json;
     use serde_json::Value;
+    use serde_json::json;
     use sqlx::PgPool;
 
     use super::*;
     use crate::database::aws::migration::tests::MIGRATOR;
     use crate::events::aws::collecter::tests::mock_s3;
+    use crate::queries::EntriesBuilder;
     use crate::queries::update::tests::{assert_contains, entries_many};
     use crate::queries::update::tests::{
         assert_correct_records, assert_model_contains, assert_wildcard_update,
         change_attribute_entries, change_attributes, change_many, update_ingest_ids,
     };
-    use crate::queries::EntriesBuilder;
     use crate::routes::list::tests::response_from;
     use crate::uuid::UuidGenerator;
     use aws_sdk_s3::operation::put_object_tagging::PutObjectTaggingOutput;
@@ -608,7 +605,7 @@ mod tests {
         entries.s3_objects[0].ingest_id = Some(Uuid::default());
         entries.s3_objects[1].ingest_id = None;
 
-        assert_contains(&vec![s3_objects], &entries, 0..1);
+        assert_contains(&[s3_objects], &entries, 0..1);
         assert_correct_records(client, entries.clone()).await;
 
         let patch = json!({
@@ -630,7 +627,7 @@ mod tests {
             Some("00000000-0000-0000-0000-000000000001".parse().unwrap());
         entries.s3_objects[1].ingest_id = None;
 
-        assert_contains(&vec![s3_objects], &entries, 0..1);
+        assert_contains(&[s3_objects], &entries, 0..1);
         assert_correct_records(client, entries.clone()).await;
 
         let patch = json!({
@@ -651,7 +648,7 @@ mod tests {
         entries.s3_objects[0].ingest_id = None;
         entries.s3_objects[1].ingest_id = None;
 
-        assert_contains(&vec![s3_objects], &entries, 0..1);
+        assert_contains(&[s3_objects], &entries, 0..1);
         assert_correct_records(client, entries).await;
     }
 
@@ -1019,7 +1016,7 @@ mod tests {
         entries_many(&mut entries, &[2], json!({"attributeId": "2"}));
         entries.s3_objects[2].ingest_id = Some(Uuid::default());
 
-        assert_contains(&vec![s3_objects], &entries, 2..3);
+        assert_contains(&[s3_objects], &entries, 2..3);
         assert_correct_records(client, entries).await;
     }
 

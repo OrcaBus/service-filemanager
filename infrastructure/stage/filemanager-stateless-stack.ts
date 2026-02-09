@@ -23,6 +23,7 @@ import {
 } from '@orcabus/platform-cdk-constructs/api-gateway';
 import { ProviderFunction } from '@orcabus/platform-cdk-constructs/provider-function';
 import { NamedLambdaRole } from '@orcabus/platform-cdk-constructs/named-lambda-role';
+import { SlackAlerts } from '@orcabus/platform-cdk-constructs/shared-config/slack';
 
 /**
  * Stateful config for filemanager.
@@ -139,6 +140,7 @@ export class FileManagerStack extends Stack {
       ingestQueues: [this.queue],
       buckets: props.ingestBuckets,
       role: this.ingestRole,
+      snsTopicArn: SlackAlerts.formatArn(this),
       ...props,
     });
   }

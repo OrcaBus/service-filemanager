@@ -17,9 +17,9 @@ use crate::env::Config as EnvConfig;
 use crate::error::Error::ConfigError;
 use crate::error::Result;
 use crate::events::aws::collecter::CollecterBuilder;
-use crate::events::aws::inventory::{DiffMessages, Inventory, Manifest};
-use crate::events::aws::message::EventType::Created;
-use crate::events::aws::{FlatS3EventMessages, TransposedS3EventMessages};
+use crate::events::aws::inventory::{Inventory, Manifest};
+use crate::events::aws::message::EventType;
+use crate::events::aws::{DiffCrawlCreatedMessage, FlatS3EventMessages, TransposedS3EventMessages};
 use crate::events::{Collect, EventSourceType};
 
 /// Handle SQS events by manually calling the SQS receive function. This is meant
@@ -119,7 +119,7 @@ pub async fn ingest_s3_inventory(
 
     let mut tx = query.transaction().await?;
     let database_records = query
-        .select_existing_by_bucket_key(
+        .select_current_by_bucket_key(
             &mut tx,
             transposed_events.buckets.as_slice(),
             transposed_events.keys.as_slice(),
@@ -129,25 +129,34 @@ pub async fn ingest_s3_inventory(
     tx.commit().await?;
 
     // Get only the current created state of records.
-    let database_records = FlatS3EventMessages(
-        database_records
-            .0
-            .into_iter()
-            .filter(|record| record.event_type == Created)
-            .collect(),
-    );
+    let database_records = FlatS3EventMessages(database_records.0.into_iter().collect());
 
     // Some back and forth between transposed vs not transposed events. Potential optimization
     // could involve using ndarray + slicing, with an enum representing the fields of the struct.
-    let transposed_events: HashSet<DiffMessages> = HashSet::from_iter(Vec::<DiffMessages>::from(
-        FlatS3EventMessages::from(transposed_events),
-    ));
-    let database_records: HashSet<DiffMessages> =
-        HashSet::from_iter(Vec::<DiffMessages>::from(database_records));
+    let transposed_events: HashSet<DiffCrawlCreatedMessage> =
+        HashSet::from_iter(Vec::<DiffCrawlCreatedMessage>::from(
+            FlatS3EventMessages::from(transposed_events),
+        ));
+    let database_records: HashSet<DiffCrawlCreatedMessage> =
+        HashSet::from_iter(Vec::<DiffCrawlCreatedMessage>::from(database_records));
 
-    // Note, it isn't strictly necessary to perform a diff as the database will handle duplicate
-    // records, however this saves some unnecessary database processing.
-    let diff = &transposed_events - &database_records;
+    // The difference keeps the records that need to be crawled
+    let diff_created = transposed_events
+        .difference(&database_records)
+        .cloned()
+        .collect_vec();
+    // All records that are not in the inventory, but are in the database represent records that
+    // should be deleted from the database.
+    let diff_deleted = database_records
+        .difference(&transposed_events)
+        .cloned()
+        .map(|mut record| {
+            record.0.event_type = EventType::Deleted;
+            record.0.is_current_state = false;
+            record
+        })
+        .collect_vec();
+    let diff = [diff_created, diff_deleted].concat();
 
     if diff.is_empty() {
         debug!("no diff found between database and inventory");
@@ -161,7 +170,7 @@ pub async fn ingest_s3_inventory(
         // unless the state of the S3 bucket was kept the same.
         // TODO: add option to check for object existence with HeadObject before ingesting.
         let events = EventSourceType::S3(TransposedS3EventMessages::from(
-            FlatS3EventMessages::from(diff.into_iter().collect_vec()),
+            FlatS3EventMessages::from(diff),
         ));
 
         database_client.ingest(events).await?;
@@ -205,30 +214,31 @@ pub(crate) mod tests {
 
     use aws_lambda_events::sqs::SqsMessage;
     use chrono::DateTime;
-    use sqlx::postgres::PgRow;
     use sqlx::PgPool;
+    use sqlx::postgres::PgRow;
 
     use super::*;
     use crate::database::aws::ingester::tests::{
-        assert_row, expected_message, fetch_results, remove_version_ids, test_events, test_ingester,
+        assert_row, expected_message, fetch_results_ordered, remove_version_ids, test_events,
+        test_ingester,
     };
     use crate::database::aws::migration::tests::MIGRATOR;
     use crate::database::entities::sea_orm_active_enums::{ArchiveStatus, Reason};
+    use crate::events::EventSourceType::S3;
+    use crate::events::aws::FlatS3EventMessage;
     use crate::events::aws::collecter::tests::{s3_client_expectations, sqs_client_expectations};
     use crate::events::aws::inventory::tests::{
-        csv_manifest_from_key_expectations, EXPECTED_LAST_MODIFIED_ONE,
-        EXPECTED_LAST_MODIFIED_THREE, EXPECTED_LAST_MODIFIED_TWO, EXPECTED_QUOTED_E_TAG_KEY_2,
-        MANIFEST_BUCKET,
+        EXPECTED_LAST_MODIFIED_ONE, EXPECTED_LAST_MODIFIED_THREE, EXPECTED_LAST_MODIFIED_TWO,
+        EXPECTED_QUOTED_E_TAG_KEY_2, MANIFEST_BUCKET, csv_manifest_from_key_expectations,
     };
-    use crate::events::aws::message::default_version_id;
+    use crate::events::aws::message::EventType::Created;
     use crate::events::aws::message::EventType::Deleted;
+    use crate::events::aws::message::default_version_id;
     use crate::events::aws::tests::{
-        expected_event_record_simple, EXPECTED_QUOTED_E_TAG, EXPECTED_SEQUENCER_CREATED_ONE,
-        EXPECTED_SEQUENCER_CREATED_TWO, EXPECTED_SEQUENCER_DELETED_ONE, EXPECTED_SHA256,
-        EXPECTED_VERSION_ID,
+        EXPECTED_QUOTED_E_TAG, EXPECTED_SEQUENCER_CREATED_ONE, EXPECTED_SEQUENCER_CREATED_TWO,
+        EXPECTED_SEQUENCER_DELETED_ONE, EXPECTED_SHA256, EXPECTED_VERSION_ID,
+        expected_event_record_simple,
     };
-    use crate::events::aws::FlatS3EventMessage;
-    use crate::events::EventSourceType::S3;
 
     #[sqlx::test(migrator = "MIGRATOR")]
     async fn test_receive_and_ingest(pool: PgPool) {
@@ -246,12 +256,10 @@ pub(crate) mod tests {
     async fn test_ingest_event(pool: PgPool) {
         let s3_client = s3_client_expectations();
 
-        let event = SqsEvent {
-            records: vec![SqsMessage {
-                body: Some(expected_event_record_simple(false)),
-                ..Default::default()
-            }],
-        };
+        let mut event = SqsEvent::default();
+        let mut message = SqsMessage::default();
+        message.body = Some(expected_event_record_simple(false));
+        event.records = vec![message];
 
         let ingester = ingest_event(
             event,
@@ -262,13 +270,13 @@ pub(crate) mod tests {
         .await
         .unwrap();
 
-        let s3_object_results = fetch_results(&ingester).await;
+        let s3_object_results = fetch_results_ordered(&ingester).await;
 
         assert_eq!(s3_object_results.len(), 2);
         let message = expected_message(Some(0), EXPECTED_VERSION_ID.to_string(), false, Created)
             .with_archive_status(Some(ArchiveStatus::DeepArchiveAccess));
         assert_row(
-            &s3_object_results[1],
+            &s3_object_results[0],
             message,
             Some(EXPECTED_SEQUENCER_CREATED_ONE.to_string()),
             Some(Default::default()),
@@ -278,7 +286,7 @@ pub(crate) mod tests {
             .with_sha256(None)
             .with_last_modified_date(None);
         assert_row(
-            &s3_object_results[0],
+            &s3_object_results[1],
             message,
             Some(EXPECTED_SEQUENCER_DELETED_ONE.to_string()),
             Some(Default::default()),
@@ -379,14 +387,14 @@ pub(crate) mod tests {
 
         f(sqs_client, s3_client).await;
 
-        let s3_object_results = fetch_results(client).await;
+        let s3_object_results = fetch_results_ordered(client).await;
 
         assert_eq!(s3_object_results.len(), 2);
         let message = expected_message(Some(0), EXPECTED_VERSION_ID.to_string(), false, Created)
             .with_is_current_state(false)
             .with_archive_status(Some(ArchiveStatus::DeepArchiveAccess));
         assert_row(
-            &s3_object_results[1],
+            &s3_object_results[0],
             message,
             Some(EXPECTED_SEQUENCER_CREATED_ONE.to_string()),
             Some(Default::default()),
@@ -397,7 +405,7 @@ pub(crate) mod tests {
             .with_last_modified_date(None)
             .with_is_current_state(false);
         assert_row(
-            &s3_object_results[0],
+            &s3_object_results[1],
             message,
             Some(EXPECTED_SEQUENCER_DELETED_ONE.to_string()),
             Some(Default::default()),

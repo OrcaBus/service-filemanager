@@ -1,8 +1,8 @@
 //! Handles loading environment variables as config options for filemanager.
 //!
 
-use axum::http::header::AUTHORIZATION;
 use axum::http::Method;
+use axum::http::header::AUTHORIZATION;
 use chrono::Duration;
 use envy::from_env;
 use serde::de::Error;

@@ -4,16 +4,18 @@
 use aws_sdk_s3::types::ArchiveStatus as AwsArchiveStatus;
 use aws_sdk_s3::types::StorageClass as AwsStorageClass;
 use chrono::{DateTime, Utc};
-use itertools::{izip, Itertools};
+use itertools::{Itertools, izip};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use std::hash::{Hash, Hasher};
 use uuid::Uuid;
 
 use message::EventMessage;
 
 use crate::database::entities::sea_orm_active_enums::{ArchiveStatus, Reason};
-use crate::events::aws::message::{default_version_id, EventType};
+use crate::database::entities::{s3_object, sea_orm_active_enums};
 use crate::events::aws::EventType::{Created, Deleted, Other};
+use crate::events::aws::message::{EventType, default_version_id};
 use crate::uuid::UuidGenerator;
 use sea_orm::prelude::Json;
 use sqlx::postgres::{PgHasArrayType, PgTypeInfo};
@@ -32,6 +34,7 @@ pub mod message;
     PartialOrd,
     Ord,
     Clone,
+    Hash,
     sqlx::Type,
     Serialize,
     Deserialize,
@@ -70,8 +73,26 @@ impl StorageClass {
             _ => None,
         }
     }
+
+    /// Convert from the database representation of the storage class to the filemanager storage
+    /// class.
+    pub fn from_database(storage_class: sea_orm_active_enums::StorageClass) -> Self {
+        match storage_class {
+            sea_orm_active_enums::StorageClass::DeepArchive => Self::DeepArchive,
+            sea_orm_active_enums::StorageClass::Glacier => Self::Glacier,
+            sea_orm_active_enums::StorageClass::GlacierIr => Self::GlacierIr,
+            sea_orm_active_enums::StorageClass::IntelligentTiering => Self::IntelligentTiering,
+            sea_orm_active_enums::StorageClass::OnezoneIa => Self::OnezoneIa,
+            sea_orm_active_enums::StorageClass::Outposts => Self::Outposts,
+            sea_orm_active_enums::StorageClass::ReducedRedundancy => Self::ReducedRedundancy,
+            sea_orm_active_enums::StorageClass::Snow => Self::Snow,
+            sea_orm_active_enums::StorageClass::Standard => Self::Standard,
+            sea_orm_active_enums::StorageClass::StandardIa => Self::StandardIa,
+        }
+    }
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for Reason {
     fn default() -> Self {
         Self::Unknown
@@ -367,7 +388,7 @@ impl From<FlatS3EventMessages> for Events {
 }
 
 /// Flattened AWS S3 events
-#[derive(Debug, Deserialize, Eq, PartialEq, Default)]
+#[derive(Debug, Deserialize, Eq, PartialEq, Default, Clone)]
 #[serde(from = "EventMessage")]
 pub struct FlatS3EventMessages(pub Vec<FlatS3EventMessage>);
 
@@ -415,22 +436,26 @@ impl FlatS3EventMessages {
     pub fn dedup(self) -> Self {
         let messages = self.into_inner();
 
-        Self(
-            messages
-                .into_iter()
-                .unique_by(|value| {
-                    (
-                        value.sequencer.clone(),
-                        value.event_type.clone(),
-                        value.bucket.clone(),
-                        value.key.clone(),
-                        value.version_id.clone(),
-                        // Note, `last_modified` and `storage_class` are always `None` at this point anyway so don't need
-                        // to be considered. `size` and `e_tag` should be the same but are unimportant in deduplication.
-                    )
-                })
-                .collect(),
-        )
+        // Events with a null sequencer are always considered unique.
+        let (null_sequencer, messages): (Vec<_>, Vec<_>) = messages
+            .into_iter()
+            .partition(|event| event.sequencer.is_none());
+        let messages = messages
+            .into_iter()
+            .unique_by(|value| {
+                (
+                    value.sequencer.clone(),
+                    value.event_type.clone(),
+                    value.bucket.clone(),
+                    value.key.clone(),
+                    value.version_id.clone(),
+                    // Note, `last_modified` and `storage_class` are always `None` at this point anyway so don't need
+                    // to be considered. `size` and `e_tag` should be the same but are unimportant in deduplication.
+                )
+            })
+            .collect_vec();
+
+        Self([null_sequencer, messages].concat())
     }
 
     /// Ordering is implemented so that the sequencer values are considered when the bucket, the
@@ -444,41 +469,39 @@ impl FlatS3EventMessages {
         messages.sort_by(|a, b| {
             if let (Some(a_sequencer), Some(b_sequencer)) =
                 (a.sequencer.as_ref(), b.sequencer.as_ref())
+                && a.bucket == b.bucket
+                && a.key == b.key
+                && a.version_id == b.version_id
+                && a.event_type == b.event_type
             {
-                if a.bucket == b.bucket
-                    && a.key == b.key
-                    && a.version_id == b.version_id
-                    && a.event_type == b.event_type
-                {
-                    return (
-                        a_sequencer,
-                        &a.event_time,
-                        &a.event_type,
-                        &a.bucket,
-                        &a.key,
-                        &a.version_id,
-                        &a.size,
-                        &a.e_tag,
+                return (
+                    a_sequencer,
+                    &a.event_time,
+                    &a.event_type,
+                    &a.bucket,
+                    &a.key,
+                    &a.version_id,
+                    &a.size,
+                    &a.e_tag,
+                    &a.sha256,
+                    &a.storage_class,
+                    &a.last_modified_date,
+                    &a.is_delete_marker,
+                )
+                    .cmp(&(
+                        b_sequencer,
+                        &b.event_time,
+                        &b.event_type,
+                        &b.bucket,
+                        &b.key,
+                        &b.version_id,
+                        &b.size,
+                        &b.e_tag,
                         &a.sha256,
-                        &a.storage_class,
-                        &a.last_modified_date,
-                        &a.is_delete_marker,
-                    )
-                        .cmp(&(
-                            b_sequencer,
-                            &b.event_time,
-                            &b.event_type,
-                            &b.bucket,
-                            &b.key,
-                            &b.version_id,
-                            &b.size,
-                            &b.e_tag,
-                            &a.sha256,
-                            &b.storage_class,
-                            &b.last_modified_date,
-                            &b.is_delete_marker,
-                        ));
-                }
+                        &b.storage_class,
+                        &b.last_modified_date,
+                        &b.is_delete_marker,
+                    ));
             }
 
             (
@@ -733,9 +756,170 @@ impl FlatS3EventMessage {
     }
 }
 
+impl From<s3_object::Model> for FlatS3EventMessage {
+    fn from(record: s3_object::Model) -> Self {
+        FlatS3EventMessage {
+            s3_object_id: record.s3_object_id,
+            sequencer: record.sequencer,
+            bucket: record.bucket,
+            key: record.key,
+            version_id: record.version_id,
+            size: record.size,
+            e_tag: record.e_tag,
+            sha256: record.sha256,
+            storage_class: record.storage_class.map(StorageClass::from_database),
+            last_modified_date: record.last_modified_date.map(DateTime::from),
+            event_time: record.event_time.map(DateTime::from),
+            event_type: record.event_type.into(),
+            is_delete_marker: record.is_delete_marker,
+            reason: record.reason,
+            archive_status: record.archive_status,
+            ingest_id: record.ingest_id,
+            is_current_state: record.is_current_state,
+            attributes: record.attributes,
+            number_duplicate_events: record.number_duplicate_events,
+            number_reordered: record.number_reordered,
+        }
+    }
+}
+
+impl From<sea_orm_active_enums::EventType> for EventType {
+    fn from(event_type: sea_orm_active_enums::EventType) -> Self {
+        match event_type {
+            sea_orm_active_enums::EventType::Created => Created,
+            sea_orm_active_enums::EventType::Deleted => Deleted,
+            sea_orm_active_enums::EventType::Other => Other,
+        }
+    }
+}
+
 impl From<Vec<FlatS3EventMessages>> for FlatS3EventMessages {
     fn from(messages: Vec<FlatS3EventMessages>) -> Self {
         FlatS3EventMessages(messages.into_iter().flat_map(|message| message.0).collect())
+    }
+}
+
+/// A wrapper around event messages to allow for calculating a diff compared to the database
+/// state. Used to calculate the difference between the database state and an incoming crawl to
+/// determine which new `Created` records should be ingested into the database.
+///
+/// Checks for equality using the bucket, key and version_id. This is used to determine
+/// which records are ingested into the database when doing a crawl, in order to avoid ingesting
+/// records needlessly when the update would not change the information in the database
+/// meaningfully.
+///
+/// For this to occur, `Hash` and `PartialEq` are implemented using logic that determines which
+/// fields are considered "updatable", and should be ingested for a crawl, and which fields are not.
+/// This is then used to compare the difference between the database state and the incoming crawl
+/// objects using a `HashSet`.
+///
+/// The following fields are not considered meaningful, and therefore are allowed to be different
+/// for records to be considered the same:
+/// * `s3_object_id`
+/// * `event_time`
+/// * `reason`
+/// * `sequencer`
+#[derive(Debug, Eq, Clone)]
+pub struct DiffCrawlCreatedMessage(pub FlatS3EventMessage);
+
+impl Hash for DiffCrawlCreatedMessage {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.bucket.hash(state);
+        self.0.key.hash(state);
+        self.0.version_id.hash(state);
+        self.0.size.hash(state);
+        self.0.e_tag.hash(state);
+        self.0.sha256.hash(state);
+        self.0.storage_class.hash(state);
+        self.0.last_modified_date.hash(state);
+        self.0.event_type.hash(state);
+        self.0.is_delete_marker.hash(state);
+        self.0.archive_status.hash(state);
+        self.0.ingest_id.hash(state);
+        self.0.is_current_state.hash(state);
+        self.0.attributes.hash(state);
+    }
+}
+
+impl PartialEq for DiffCrawlCreatedMessage {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.bucket == other.0.bucket
+            && self.0.key == other.0.key
+            && self.0.version_id == other.0.version_id
+            && self.0.size == other.0.size
+            && self.0.e_tag == other.0.e_tag
+            && self.0.sha256 == other.0.sha256
+            && self.0.storage_class == other.0.storage_class
+            && self.0.last_modified_date == other.0.last_modified_date
+            && self.0.event_type == other.0.event_type
+            && self.0.is_delete_marker == other.0.is_delete_marker
+            && self.0.archive_status == other.0.archive_status
+            && self.0.ingest_id == other.0.ingest_id
+            && self.0.is_current_state == other.0.is_current_state
+            && self.0.attributes == other.0.attributes
+    }
+}
+
+impl From<FlatS3EventMessages> for Vec<DiffCrawlCreatedMessage> {
+    fn from(value: FlatS3EventMessages) -> Self {
+        value.0.into_iter().map(DiffCrawlCreatedMessage).collect()
+    }
+}
+
+impl From<Vec<DiffCrawlCreatedMessage>> for FlatS3EventMessages {
+    fn from(value: Vec<DiffCrawlCreatedMessage>) -> Self {
+        Self(value.into_iter().map(|diff| diff.0).collect())
+    }
+}
+
+impl From<DiffCrawlCreatedMessage> for DiffCrawlDeletedMessage {
+    fn from(value: DiffCrawlCreatedMessage) -> Self {
+        Self(value.0)
+    }
+}
+
+/// A wrapper around event messages to allow for calculating a diff compared to the database
+/// state. Used to calculate the difference between the database state and an incoming crawl to
+/// determine which new `Deleted` records should be ingested into the database.
+///
+/// Checks for equality using the bucket, key and version_id. This is the only information needed
+/// to determine which records to delete. Notably, this is different from `DiffCrawlCreatedMessages`
+/// as it does not take into account other fields, which aren't required for comparing the database
+/// diff when removing an event.
+#[derive(Debug, Eq, Clone)]
+pub struct DiffCrawlDeletedMessage(pub FlatS3EventMessage);
+
+impl Hash for DiffCrawlDeletedMessage {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.bucket.hash(state);
+        self.0.key.hash(state);
+        self.0.version_id.hash(state);
+    }
+}
+
+impl PartialEq for DiffCrawlDeletedMessage {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.bucket == other.0.bucket
+            && self.0.key == other.0.key
+            && self.0.version_id == other.0.version_id
+    }
+}
+
+impl From<FlatS3EventMessages> for Vec<DiffCrawlDeletedMessage> {
+    fn from(value: FlatS3EventMessages) -> Self {
+        value.0.into_iter().map(DiffCrawlDeletedMessage).collect()
+    }
+}
+
+impl From<Vec<DiffCrawlDeletedMessage>> for FlatS3EventMessages {
+    fn from(value: Vec<DiffCrawlDeletedMessage>) -> Self {
+        Self(value.into_iter().map(|diff| diff.0).collect())
+    }
+}
+
+impl From<DiffCrawlDeletedMessage> for DiffCrawlCreatedMessage {
+    fn from(value: DiffCrawlDeletedMessage) -> Self {
+        Self(value.0)
     }
 }
 
@@ -744,9 +928,11 @@ pub(crate) mod tests {
     use crate::database::entities::sea_orm_active_enums::Reason;
     use crate::events::aws::message::{Message, Record};
     use crate::events::aws::{
-        EventType, FlatS3EventMessage, FlatS3EventMessages, TransposedS3EventMessages,
+        DiffCrawlCreatedMessage, EventType, FlatS3EventMessage, FlatS3EventMessages,
+        TransposedS3EventMessages,
     };
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
+    use std::collections::HashSet;
 
     pub(crate) const EXPECTED_SEQUENCER_CREATED_ZERO: &str = "0055AED6DCD90281E3"; // pragma: allowlist secret
     pub(crate) const EXPECTED_SEQUENCER_CREATED_ONE: &str = "0055AED6DCD90281E4"; // pragma: allowlist secret
@@ -761,6 +947,60 @@ pub(crate) mod tests {
     pub(crate) const EXPECTED_VERSION_ID: &str = "096fKKXTRTtl3on89fVO.nfljtsv6qko";
     pub(crate) const EXPECTED_SHA256: &str = "Y0sCextp4SQtQNU+MSs7SsdxD1W+gfKJtUlEbvZ3i+4="; // pragma: allowlist secret
     pub(crate) const EXPECTED_REQUEST_ID: &str = "C3D13FE58DE4C810"; // pragma: allowlist secret
+
+    #[test]
+    fn diff_messages() {
+        let database_records = vec![
+            FlatS3EventMessage {
+                bucket: "bucket".to_string(),
+                key: "key".to_string(),
+                version_id: "version".to_string(),
+                // Other fields shouldn't affect this.
+                sequencer: Some("123".to_string()),
+                ..Default::default()
+            },
+            FlatS3EventMessage {
+                bucket: "bucket".to_string(),
+                key: "key1".to_string(),
+                version_id: "version".to_string(),
+                ..Default::default()
+            },
+        ];
+        let inventory_records = vec![
+            FlatS3EventMessage {
+                bucket: "bucket".to_string(),
+                key: "key".to_string(),
+                version_id: "version".to_string(),
+                sequencer: Some("123".to_string()),
+                ..Default::default()
+            },
+            FlatS3EventMessage {
+                bucket: "bucket".to_string(),
+                key: "key2".to_string(),
+                version_id: "version".to_string(),
+                ..Default::default()
+            },
+        ];
+
+        let inventory_records: HashSet<DiffCrawlCreatedMessage> =
+            HashSet::from_iter(Vec::<DiffCrawlCreatedMessage>::from(FlatS3EventMessages(
+                inventory_records,
+            )));
+        let database_records: HashSet<DiffCrawlCreatedMessage> =
+            HashSet::from_iter(Vec::<DiffCrawlCreatedMessage>::from(FlatS3EventMessages(
+                database_records,
+            )));
+
+        let diff = &inventory_records - &database_records;
+        let expected = HashSet::from_iter(vec![DiffCrawlCreatedMessage(FlatS3EventMessage {
+            bucket: "bucket".to_string(),
+            key: "key2".to_string(),
+            version_id: "version".to_string(),
+            ..Default::default()
+        })]);
+
+        assert_eq!(diff, expected);
+    }
 
     #[test]
     fn test_flat_events() {
@@ -822,6 +1062,48 @@ pub(crate) mod tests {
             second,
             &EventType::Deleted,
             Some(EXPECTED_SEQUENCER_DELETED_ONE.to_string()),
+            None,
+            EXPECTED_VERSION_ID.to_string(),
+            false,
+            false,
+        );
+    }
+
+    #[test]
+    fn test_sort_and_dedup_null_sequencer() {
+        let mut events = expected_flat_events_simple();
+        events.0.iter_mut().for_each(|event| event.sequencer = None);
+        let events = events.sort_and_dedup();
+
+        let mut result = events.into_inner().into_iter();
+
+        let first = result.next().unwrap();
+        assert_flat_s3_event(
+            first,
+            &EventType::Created,
+            None,
+            Some(0),
+            EXPECTED_VERSION_ID.to_string(),
+            false,
+            true,
+        );
+
+        let second = result.next().unwrap();
+        assert_flat_s3_event(
+            second,
+            &EventType::Created,
+            None,
+            Some(0),
+            EXPECTED_VERSION_ID.to_string(),
+            false,
+            true,
+        );
+
+        let third = result.next().unwrap();
+        assert_flat_s3_event(
+            third,
+            &EventType::Deleted,
+            None,
             None,
             EXPECTED_VERSION_ID.to_string(),
             false,

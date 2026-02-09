@@ -134,8 +134,8 @@ The project is divided into multiple crates that serve different functionality.
 * [filemanager-migrate-lambda]: A Lambda function to apply database migrations.
 * [database]: Database migration files and queries.
 
-[architecture]: docs/ARCHITECTURE.md
-[api-guide]: docs/API_GUIDE.md
+[architecture]: ../docs/architecture/ARCHITECTURE.md
+[api-guide]: ../docs/operation/API_GUIDE.md
 [filemanager]: filemanager
 [filemanager-api-lambda]: filemanager-api-lambda
 [filemanager-api-server]: filemanager-api-server

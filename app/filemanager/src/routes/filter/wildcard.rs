@@ -39,8 +39,8 @@ impl<T> WildcardEither<T> {
     }
 }
 
-/// A wildcard type represents a filter to match arbitrary characters. Use '%' for multiple characters
-/// and '_' for a single character. Use '\\' to escape these characters. Wildcards are converted to
+/// A wildcard type represents a filter to match arbitrary characters. Use '*' for multiple characters
+/// and '?' for a single character. Use '\\' to escape these characters. Wildcards are converted to
 /// postgres `like` or `ilike` queries.
 #[derive(Serialize, Deserialize, Debug, Default, ToSchema, Eq, PartialEq, Clone)]
 #[serde(default, rename_all = "camelCase")]
@@ -66,13 +66,13 @@ impl Wildcard {
             // If there is a backslash, then the next character can be '*' and not be a wildcard.
             if char == '\\' {
                 let peek = chars.peek();
-                if let Some((_, next_char)) = peek {
-                    if *next_char == '*' || *next_char == '?' || *next_char == '\\' {
-                        // Skip the next character as we have just processed it.
-                        chars.next();
-                        escaped_positions.push(pos);
-                        continue;
-                    }
+                if let Some((_, next_char)) = peek
+                    && (*next_char == '*' || *next_char == '?' || *next_char == '\\')
+                {
+                    // Skip the next character as we have just processed it.
+                    chars.next();
+                    escaped_positions.push(pos);
+                    continue;
                 }
 
                 escaped_positions.push(pos);
@@ -122,8 +122,7 @@ impl Wildcard {
                         if *next_char != '*' && *next_char != '?' && *next_char != '\\' =>
                     {
                         return Err(ParseError(format!(
-                            "invalid escape character: `\\{}`",
-                            next_char
+                            "invalid escape character: `\\{next_char}`"
                         )));
                     }
                     None => return Err(ParseError("invalid escape character".to_string())),
@@ -302,12 +301,16 @@ mod tests {
             r"t\_st"
         );
 
-        assert!(Wildcard::new(r"t\st".to_string())
-            .to_like_expression()
-            .is_err());
-        assert!(Wildcard::new(r"tes\".to_string())
-            .to_like_expression()
-            .is_err());
+        assert!(
+            Wildcard::new(r"t\st".to_string())
+                .to_like_expression()
+                .is_err()
+        );
+        assert!(
+            Wildcard::new(r"tes\".to_string())
+                .to_like_expression()
+                .is_err()
+        );
     }
 
     #[test]
@@ -405,11 +408,15 @@ mod tests {
             r"t\\st"
         );
 
-        assert!(Wildcard::new(r"t\st".to_string())
-            .to_eq_expression()
-            .is_err());
-        assert!(Wildcard::new(r"tes\".to_string())
-            .to_eq_expression()
-            .is_err());
+        assert!(
+            Wildcard::new(r"t\st".to_string())
+                .to_eq_expression()
+                .is_err()
+        );
+        assert!(
+            Wildcard::new(r"tes\".to_string())
+                .to_eq_expression()
+                .is_err()
+        );
     }
 }

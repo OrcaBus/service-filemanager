@@ -4,6 +4,7 @@ import { DeploymentStackPipeline } from '@orcabus/platform-cdk-constructs/deploy
 import { getFileManagerStatefulProps } from '../stage/config';
 import { FileManagerStatefulStack } from '../stage/filemanager-stateful-stack';
 import { Pipeline } from 'aws-cdk-lib/aws-codepipeline';
+import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 
 export class StatefulStack extends cdk.Stack {
   readonly pipeline: Pipeline;
@@ -22,7 +23,26 @@ export class StatefulStack extends cdk.Stack {
         prod: getFileManagerStatefulProps('PROD'),
       },
       pipelineName: 'OrcaBus-StatefulFileManager',
-      cdkSynthCmd: ['pnpm install --frozen-lockfile --ignore-scripts', 'pnpm cdk-stateful synth'],
+      cdkSynthCmd: ['pnpm cdk-stateful synth'],
+      // No app tests for stateful stack.
+      unitAppTestConfig: {
+        command: [],
+      },
+      unitIacTestConfig: {
+        command: [
+          'pnpm test --testPathPatterns=test/stateful',
+          'pnpm test --testPathPatterns=test/integration-stateful',
+        ],
+        rolePolicyStatements: [
+          new PolicyStatement({
+            actions: ['events:TestEventPattern'],
+            resources: ['*'],
+          }),
+        ],
+      },
+      cacheOptions: {
+        namespace: 'filemanager-stateful',
+      },
     });
 
     this.pipeline = deployment.pipeline;

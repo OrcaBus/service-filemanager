@@ -66,6 +66,23 @@ There are no automated changelogs or releases, however semantic versioning is fo
 
 [conventional-commits]: https://www.conventionalcommits.org/en/v1.0.0/
 
+Operation
+--------------------------------------------------------------------------------
+
+See the [docs] directory for general docs and operation.
+
+### SOPs
+
+See [docs/operation/sop][sop].
+
+### Usage Examples
+
+See [docs/operation/API_GUIDE.md][usage].
+
+[docs]: docs
+[sop]: docs/operation/sop
+[usage]: docs/operation/API_GUIDE.md
+
 Infrastructure & Deployment
 --------------------------------------------------------------------------------
 
@@ -213,5 +230,5 @@ make test
 [pnpm]: https://pnpm.io/
 [filemanager]: https://github.com/OrcaBus/service-filemanager
 [readme]: app/README.md
-[api]: app/docs/API_GUIDE.md
-[architecture]: app/docs/ARCHITECTURE.md
+[api]: docs/operation/API_GUIDE.md
+[architecture]: docs/architecture/ARCHITECTURE.md

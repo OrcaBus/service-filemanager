@@ -5,15 +5,15 @@
 //! is here.
 //!
 
-use crate::error::ErrorKind::OpenAPIGeneration;
 use crate::Result;
+use crate::error::ErrorKind::OpenAPIGeneration;
 use heck::AsPascalCase;
 use prettyplease::unparse;
 use quote::format_ident;
 use std::fs::{read_dir, read_to_string, write};
 use std::path::Path;
 use syn::visit_mut::VisitMut;
-use syn::{parse_file, parse_quote, Ident, ItemStruct, Type};
+use syn::{Ident, ItemStruct, Type, parse_file, parse_quote};
 use tokio::process::Command;
 
 /// OpenAPI definition generator implementing `VisitMut`.

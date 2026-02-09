@@ -2,11 +2,11 @@
 # When running this microservice from the Docker Compose root, this Dockerfile
 # will build the image, install dependencies, and start the server
 
-FROM public.ecr.aws/docker/library/rust:1.84 AS chef
+FROM public.ecr.aws/docker/library/rust:1.93 AS chef
 
-ENV SCCACHE_VERSION=0.9.1
-ENV CARGO_CHEF_VERSION=0.1.71
-ENV CARGO_BINSTALL_VERSION=1.10.23
+ENV SCCACHE_VERSION=0.13.0
+ENV CARGO_CHEF_VERSION=0.1.73
+ENV CARGO_BINSTALL_VERSION=1.17.3
 
 ENV RUSTC_WRAPPER="/usr/local/cargo/bin/sccache"
 
@@ -32,8 +32,7 @@ RUN --mount=type=cache,target=/root/.cache/sccache cargo chef cook --bin fileman
 COPY . .
 RUN --mount=type=cache,target=/root/.cache/sccache cargo build --bin filemanager-api-server && sccache --show-stats
 
-FROM public.ecr.aws/docker/library/debian:bookworm-slim AS runtime
-RUN env
+FROM public.ecr.aws/docker/library/debian:trixie-slim AS runtime
 
 RUN apt -y update && apt -y install curl
 COPY --from=builder /app/target/debug/filemanager-api-server /usr/local/bin

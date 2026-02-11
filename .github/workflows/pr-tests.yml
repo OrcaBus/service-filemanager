@@ -94,6 +94,9 @@ jobs:
   test-app:
     runs-on: ubuntu-24.04-arm
     if: ${{ !github.event.pull_request.draft }}
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -107,9 +110,22 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - name: Test
+      - name: Install binstall
+        uses: cargo-bins/cargo-binstall@main
+      - run: rustup component add llvm-tools
+      - run: cargo binstall grcov
+
+      - name: Test and Coverage
         working-directory: ./app
-        run: |
-          make test
+        run: make coverage
       - name: Check diff
         run: git diff --quiet HEAD
+      - name: Upload coverage
+        uses: codecov/codecov-action@v5
+        with:
+          working-directory: ./app
+          fail_ci_if_error: true
+          files: ./target/debug/lcov.info
+          flags: unittests
+          name: orcabus-filemanager
+          use_oidc: true

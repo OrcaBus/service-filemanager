@@ -94,6 +94,8 @@ jobs:
   test-app:
     runs-on: ubuntu-24.04-arm
     if: ${{ !github.event.pull_request.draft }}
+    permissions:
+      id-token: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v6

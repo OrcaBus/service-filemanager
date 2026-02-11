@@ -96,6 +96,7 @@ jobs:
     if: ${{ !github.event.pull_request.draft }}
     permissions:
       id-token: write
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -124,7 +125,7 @@ jobs:
         with:
           working-directory: ./app
           fail_ci_if_error: true
-          files: ./target/debug/lcov
+          files: ./target/debug/lcov.info
           flags: unittests
           name: orcabus-filemanager
           use_oidc: true

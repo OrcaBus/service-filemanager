@@ -66,10 +66,10 @@ fix: check-fix
 ## Run test coverage report generation
 coverage: docker-postgres entity
 	export RUSTFLAGS=-Cinstrument-coverage && \
-    export LLVM_PROFILE_FILE=filemanager-%p-%m.profraw && \
+	export LLVM_PROFILE_FILE=filemanager-%p-%m.profraw && \
 	cargo build --all-features --all-targets && \
 	cargo test --all-features --all-targets && \
-    grcov . -s . --binary-path ./target/debug/ -t lcov --branch --ignore-not-existing -o ./target/debug/
+	grcov . -s . --binary-path ./target/debug/ -t lcov --branch --ignore-not-existing -o ./target/debug/lcov.info
 
 ## Clean
 clean: docker-clean

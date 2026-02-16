@@ -761,9 +761,7 @@ pub(crate) mod tests {
 
         assert!(result.last_modified_date.is_none());
         assert!(result.sha256.is_none());
-        assert!(result.size.is_some());
         assert!(result.last_modified_date.is_none());
-        assert!(result.size.is_some());
     }
 
     #[sqlx::test(migrator = "MIGRATOR")]

@@ -20,7 +20,7 @@ use crate::routes::filter::S3ObjectsFilter;
 use crate::routes::filter::wildcard::Wildcard;
 use crate::uuid::UuidGenerator;
 use async_trait::async_trait;
-use aws_sdk_s3::error::{BuildError, ProvideErrorMetadata};
+use aws_sdk_s3::error::BuildError;
 use aws_sdk_s3::operation::get_object_tagging::GetObjectTaggingOutput;
 use aws_sdk_s3::operation::head_object::HeadObjectOutput;
 use aws_sdk_s3::primitives;
@@ -31,7 +31,6 @@ use futures::TryFutureExt;
 use futures::future::join_all;
 use itertools::Itertools;
 use std::collections::HashSet;
-use std::error;
 use std::str::FromStr;
 use tracing::{trace, warn};
 use uuid::Uuid;
@@ -258,29 +257,17 @@ impl<'a> Collecter<'a> {
         }
     }
 
-    fn warn_except_not_found<T, F>(err: &aws_sdk_s3::error::SdkError<T>, print_warning: F)
-    where
-        T: ProvideErrorMetadata + error::Error + Send + Sync + 'static,
-        F: FnOnce(),
-    {
-        // We are only worried about permission and other errors, if the object cannot be found
-        // that's ok, it was probably deleted.
-        if err.meta().code().is_none_or(|code| code != "NotFound") {
-            print_warning();
-        }
-    }
-
     /// Gets S3 metadata from HeadObject such as creation/archival timestamps and statuses.
-    pub async fn head(client: &S3Client, event: FlatS3EventMessage) -> Result<FlatS3EventMessage> {
+    pub async fn head(client: &S3Client, event: FlatS3EventMessage) -> FlatS3EventMessage {
         let head = client
             .head_object(&event.key, &event.bucket, &event.version_id)
             .inspect_err(|err| {
-                Self::warn_except_not_found(err, || {
-                    warn!(
-                        "Ingester Warning: {}",
-                        Error::from((err, "HeadObject".to_string()))
-                    )
-                });
+                warn!(
+                    "Ingester Warning for {} in {}: {}",
+                    event.key,
+                    event.bucket,
+                    Error::from((err, "HeadObject".to_string()))
+                )
             })
             .await
             .ok();
@@ -289,7 +276,7 @@ impl<'a> Collecter<'a> {
         // occurs before calling head/tagging. This means that there may be cases where the
         // storage class and other fields are not known, or object moves cannot be tracked.
         let Some(head) = head else {
-            return Ok(event);
+            return event;
         };
 
         trace!(head = ?head, "received HeadObject output");
@@ -307,14 +294,14 @@ impl<'a> Collecter<'a> {
 
         // S3 does not return a storage class for standard, which means this is the
         // default. See https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html#API_HeadObject_ResponseSyntax
-        Ok(event
+        event
             .update_storage_class(StorageClass::from_aws(storage_class.unwrap_or(Standard)))
             .update_last_modified_date(Self::convert_datetime(last_modified))
             .update_size(content_length)
             .update_e_tag(e_tag)
             .update_sha256(checksum_sha256)
             .update_delete_marker(delete_marker)
-            .update_archive_status(archive_status.and_then(ArchiveStatus::from_aws)))
+            .update_archive_status(archive_status.and_then(ArchiveStatus::from_aws))
     }
 
     /// Gets S3 tags from objects.
@@ -327,12 +314,12 @@ impl<'a> Collecter<'a> {
         let tagging = client
             .get_object_tagging(&event.key, &event.bucket, &event.version_id)
             .inspect_err(|err| {
-                Self::warn_except_not_found(err, || {
-                    warn!(
-                        "Ingester Warning: {}",
-                        Error::from((err, "GetObjectTagging".to_string()))
-                    )
-                });
+                warn!(
+                    "Ingester Warning for {} in {}: {}",
+                    event.key,
+                    event.bucket,
+                    Error::from((err, "GetObjectTagging".to_string()))
+                )
             })
             .await
             .ok();
@@ -370,12 +357,12 @@ impl<'a> Collecter<'a> {
                 )
                 .await
                 .inspect_err(|err| {
-                    Self::warn_except_not_found(err, || {
-                        warn!(
-                            "Ingester Warning: {}",
-                            Error::from((err, "PutObjectTagging".to_string()))
-                        )
-                    });
+                    warn!(
+                        "Ingester Warning for {} in {}: {}",
+                        event.key,
+                        event.bucket,
+                        Error::from((err, "PutObjectTagging".to_string()))
+                    )
                 });
 
             // Only add a ingest_id to the new record if the tagging was successful.
@@ -390,8 +377,8 @@ impl<'a> Collecter<'a> {
         // the ingest_id if the is not valid.
         let ingest_id = Uuid::from_str(tag.value()).inspect_err(|err| {
             warn!(
-                "Ingester Warning: Failed to parse ingest_id from tag: {}",
-                err
+                "Ingester Warning for {} in {}: Failed to parse ingest_id from tag: {}",
+                event.key, event.bucket, err
             );
         });
         let Ok(ingest_id) = ingest_id else {
@@ -420,8 +407,8 @@ impl<'a> Collecter<'a> {
             Ok(event.with_attributes(moved_object.attributes))
         } else {
             warn!(
-                "Ingester Warning: Object with ingest_id {} not found in database",
-                ingest_id
+                "Ingester Warning for {} in {}: Object with ingest_id {} not found in database",
+                event.key, event.bucket, ingest_id
             );
             Ok(event)
         }
@@ -579,7 +566,7 @@ impl<'a> Collecter<'a> {
 
                 trace!(key = ?event.key, bucket = ?event.bucket, "updating event");
 
-                let event = Self::head(client, event).await?;
+                let event = Self::head(client, event).await;
                 Self::tagging(config, client, database_client, event).await
             }))
             .await
@@ -742,8 +729,7 @@ pub(crate) mod tests {
             &collecter.client,
             expected_s3_event_message().with_version_id(default_version_id()),
         )
-        .await
-        .unwrap();
+        .await;
         let expected = result
             .clone()
             .with_sha256(Some(EXPECTED_SHA256.to_string()))
@@ -772,7 +758,10 @@ pub(crate) mod tests {
             expected_s3_event_message().with_version_id(default_version_id()),
         )
         .await;
-        assert!(result.is_ok());
+
+        assert!(result.last_modified_date.is_none());
+        assert!(result.sha256.is_none());
+        assert!(result.last_modified_date.is_none());
     }
 
     #[sqlx::test(migrator = "MIGRATOR")]

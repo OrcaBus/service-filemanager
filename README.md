@@ -1,6 +1,9 @@
 filemanager
 --------------------------------------------------------------------------------
 
+[![codecov.io](https://codecov.io/gh/OrcaBus/service-filemanager/coverage.svg?branch=main)](https://codecov.io/gh/OrcaBus/service-filemanager?branch=main)
+[![Test Status](https://github.com/OrcaBus/service-filemanager/workflows/Pull%20Request%20Tests/badge.svg)](https://github.com/OrcaBus/service-filemanager/actions/workflows/pr-tests.yml)
+
 The filemanager tracks object state in S3 to show how objects are created, deleted or moved and maintains a queryable
 table of the results. It does this by ingesting S3 events into a postgres database and filling out object metadata like
 the storage class. It also supports annotating records with JSON key-values and tracking how objects move using S3 tags.

@@ -1,7 +1,7 @@
 # Filemanager V2 Requirements
 
 The following document details filemanager user requirements for designing the V2 refactor. The aim of the requirements
-and V2 design is to determine what is actually required of a filemanager, and to increase the current implementation's
+and V2 design is to determine what is actually required of a filemanager in order to increase the filemanager's
 maintainability, reliability and performance. Ideally the new filemanager should be more targeted and leaner, so that it
 only deals with requirements that it needs to.
 
@@ -49,26 +49,27 @@ bucket location to another. It must recognise that a move between locations repr
 
 ### 5. Provide long-lived presigned URLs to objects
 
-The filemanager must provide presigned URLs to any objects that it has access to for a long duration (7 days).
+The filemanager must provide presigned URLs to any objects that it has access to for a long duration, e.g. 7 days.
 
 ### 6. Annotations can be applied to single objects, or groups of objects
+
+See [8][req-8] and [9][req-9] for a description of annotations.
 
 For example, a `portal_run_id` applies to a group of objects that all have the same `portal_run_id`. There must be an
 ability for users to annotate multiple objects in a group, and groups may overlap.
 
 > [!NOTE]
-> Are there any future use-cases for this that aren't the `portal_run_id`?
+> Are there any use-cases for this that aren't the `portal_run_id`?
 
-### 7. There must be robust checksumming capabilities to find identical objects
+### 7. There must be checksumming capabilities to find identical objects
 
-There must be support for all built in AWS S3 checksums, and comparison logic to determine if two objects are the
+There must be support for all built-in AWS S3 checksums, and comparison logic to determine if two objects are the
 same. There could also be support for calculating checksums if they are missing on objects.
 
-There could also be logic that determines if objects are the same through proxy of other objects with differing
-checksums. E.g. if object A is the same as object B through an MD5 sum, and object B is the same as object C through
-a sha256 sum, then object A is also the same as object C even though they do not have the same type of checksum.
+There could be logic that determines if objects are the same through proxy of other objects with different types of
+checksums.
 
-This requirement could be used to support [4][req-4], and also find duplicate objects.
+This requirement can be used to support [4][req-4], and also find duplicate objects.
 
 ### 8. Annotate objects with the `portal_run_id`
 
@@ -85,7 +86,7 @@ performed by the `fmannotator` in response to `WorkflowStateChange` events.
 Similar to [8][req-8], allow other arbitrary annotations that represent some business logic in the OrcaBus system.
 
 > [!NOTE]
-> Would this be useful at all? What other tags could objects have that help with the orchestration?
+> Is there anything other than the `portal_run_id`? What other tags could objects have?
 
 ### 10. Allow users to respond to any annotation
 
@@ -140,13 +141,13 @@ presigning URLs for [5][req-5].
 ### 2. APIs must be read-only and database modifying operations should involve the event system
 
 Any filemanager API should only be allowed to perform read-only actions such as those described by user
-requirements [1][req-1], [2][req-2], [3][req-3], [4][req-4], or [5][req-5]. Anything that must modify the internal database of the filemanager should use
-the event bus, such as for requirements [6][req-6], [7][req-7], [8][req-8] and [9][req-9].
+requirements [1][req-1], [2][req-2], [3][req-3], [4][req-4], [5][req-5], [6][req-6] or [7][req-7]. Anything that must
+modify the internal database of the filemanager should use the event bus, such as for requirements [8][req-8],
+[9][req-9], [10][req-10] or [11][req-11].
 
 > [!NOTE]
-> I'm not sure exactly how this could work if the filemanager is intended to avoid being part of the event system. Maybe
-> it should be part of the event system? Or there should be multiple satellite services that interact with events, with
-> core filemanager logic being its own separate service.
+> Should the filemanager be part of the event system? There could be multiple services, with one service interacting
+> with events, while the core service only deals with S3 state.
 
 This requirement would be a departure from the current system which allows annotating objects using a POST/PATCH
 command.
@@ -161,7 +162,7 @@ orchestration, such as the cache buckets or archive buckets.
 
 ### 4. The filemanager's internal state must be ingestable by downstream processes
 
-Downstream processes like the orcahouse must be able to mirror database state of the filemanager.
+Downstream processes like the OrcaHouse must be able to mirror database state of the filemanager.
 
 > [!NOTE]
 > This should be met by default if implementing the filemanager as a database-based service.
@@ -199,7 +200,7 @@ have a 5 minute delay for the journal table and a 1 hour delay for the inventory
 
 Also, S3 events only contain the base object, without any additional metadata like storage classes or checksums.
 To obtain this metadata, additional `HeadObject` calls would be required which introduces some more delay. This could
-affect user requirements [1][req-1], [2][req-2], or [3][req-3].
+affect user requirements [1][req-1], [2][req-2], [3][req-3] or [7][req-7].
 
 So depending on the source of information, the following performance can be expected:
 
@@ -212,9 +213,9 @@ So depending on the source of information, the following performance can be expe
 ## Possible Designs & Discussion
 
 Given the user requirements, there is a possibility to split the filemanager into 3 kinds of services or components.
-Requirements [1][req-1], [7][req-7] are to do with the core ingester service, that handles object state on S3. Requirements
-[8][req-8] - [11][req-11] interact with the OrcaBus event system and annotate data based on orcabus business rules. Requirements [12][req-12] and
-[13][req-13] are related to transitioning or moving data on S3 directly.
+Requirements [1][req-1] - [7][req-7] are the core ingester service that handles object state on S3. Requirements
+[8][req-8] - [11][req-11] interact with the OrcaBus event system and annotate data based on orcabus business rules.
+Requirements [12][req-12] and [13][req-13] are related to transitioning or moving data on S3.
 
 ### Ingester Service
 
@@ -225,10 +226,11 @@ representing the current state on S3. The biggest change from the original filem
 an overhaul of how the data is represented on the database.
 
 The strongest source of truth for information about S3 is the S3 metadata tables, however these come with a performance
-disadvantage. The proposed design for the V2 filemanager involves using S3 events, the metadata journal
-table, and the metadata inventory table to achieve indexing speed and consistency over time.
+disadvantage. TFor the V2 filemanager, using S3 events, the metadata journal
+table, and the metadata inventory table to achieve indexing speed and consistency over time seems like it could be a good
+approach.
 
-The design involves taking the three sources of information, and feeding them into the current state and history tables
+This involves taking the three sources of information, and feeding them into the current state and history tables
 for the filemanager, which keep track of the state. The information flows from S3 events to updates on the journal table
 to the inventory table to ensure that the state is consistent. The current state table represents all objects currently
 available on S3, and the history table represents historical records.
@@ -237,19 +239,18 @@ available on S3, and the history table represents historical records.
 > We could choose to allow the history table to grow forever, or eventually transition it every x months/years to a more
 > permanent storage, and away from an active table.
 
-The underlying database representation of the S3 state will have the current and history tables separate, similar to how
-S3 tables has a journal and inventory table. This is to ensure that queries on the current state are as fast as possible
-and have no bottlenecks from an growing history table.
+The underlying database representation of the S3 state could have the current and history tables separate, similar to how
+S3 tables has a journal and inventory table. This is to ensure that queries on the current state are as fast as possible.
 
 The ingester service will also maintain an API layer that responds to user requests on the S3 state, similar to the
-current filemanager. However, there should be no data-modifying API requests available to users, and these requirements
-are to be addressed by other components and services.
+current filemanager. However, there should be no data-modifying API requests available to users. Data modifying
+requirements could be addressed by other components and services.
 
 ### Annotation Service
 
 Fulfills requirements [8][req-8] - [11][req-11].
 
-The annotation service is responsible for responding to events from the OrcaBus. This is similar to the current
+The annotation service could be responsible for responding to events from the OrcaBus. This is similar to the current
 fmannotator service. The core difference is that this service may be used to annotate something other than the
 `portal_run_id`, and also may publish "annotation done" events back to the event bus.
 
@@ -263,25 +264,24 @@ themselves could be grouped to address a set of objects annotated, rather than s
 
 This service is separate from the core ingester service to provide a separation of concerns, which allows the main
 ingester service to be leaner and have a clearer purpose. It also allows the main service to not be tied down with
-the event system, or with business logic use cases like the `portal_run_id`.
+the event system, or with business logic use cases.
 
 ### Data Service
 
 Fulfills requirements [12][req-12] and [13][req-13].
 
-This service will be responsible for transitioning object lifecycle or moving objects. Currently, this is handled by
-various other services like the data sharer and the data mover. Similar to the annotation service, this service could
-respond to events from the event bus to transition objects, to support a more complete automation behind lifecycle
-transitions.
+This service could be responsible for transitioning object lifecycle or moving objects. Currently, this is handled by
+various other services like the data mover. Similar to the annotation service, this service could
+respond to events from the event bus to transition objects in an automated way.
 
-One mechanism by which this service could operation, is to tag objects that dictate how to transition them.
+One mechanism by which this service could operation, is to tag objects to determine how to transition them.
 It could also respond to timers that should move objects between buckets.
 
 > [!NOTE]
-> I think this service would require some more discussion on how to implement or define requirements. Should it just
-> do lifecycle transitions? Is it even necessary because static rules could already solve this use-case?
+> I think this service would require discussion on how to implement or scope requirements. Should it just
+> do lifecycle transitions? Is it even necessary because static rules could already solve this?
 >
-> Also, it's not clear yet how this service would depend on the main filemanager ingester service, if at all.
+> Also, it's not clear how this service would depend on the main filemanager ingester service, if at all.
 
 ### Shared Database or Multiple Databases?
 
@@ -289,8 +289,8 @@ It could also respond to timers that should move objects between buckets.
 can update a database state to achieve something like annotation. E.g., the current fmannotator uses a PATCH request
 to update the filemanager's database with a `portal_run_id`.
 
-One approach is to have separate services act on the same shared database. This kind of design is more of a monolith that
-has both the annotation service and ingestion service sharing resources.
+One approach is to have separate services act on the same shared database tables. This kind of design is more of a monolith that
+has both the annotation service and ingestion service sharing tables.
 
 **Advantages:**
 
@@ -302,35 +302,34 @@ has both the annotation service and ingestion service sharing resources.
 - Tighter coupling.
 - Less clear separation of concerns.
 
-Another approach is to have all filemanager services maintain their own database. This would be more in line with a
+Another approach is to have all filemanager services maintain their own database tables. This would be more in line with a
 microservices approach, and would involve the ingester service focussing on ingesting objects. The annotation service
 would maintain the database for annotations and would coordinate with the ingester service to find which files need to
 be annotated.
 
-When a user queries for data, one of the services must aggregate the request and query the other service to respond with
-a complete result. E.g. to find objects with a given `portal_run_id`, a single user request would go across both the
-ingester and annotation service.
+When a user queries for data, one of the services must aggregate the request or there the user would be required to
+perform two API calls and aggregate the requests themselves. E.g. to find objects with a given `portal_run_id`,
+a single user request would go across both the ingester and annotation service.
 
 > [!NOTE]
 > The actual database design is not yet clear. The ingester service would hold object-level data like the current
-> filemanager. The annotation service would hold the `portal_run_id` annotation linked to primary keys from the ingester
+> filemanager. Would the annotation service hold the `portal_run_id` annotation linked to primary keys from the ingester
 > service? Or dynamically computed?
 
 **Advantages:**
 
 - Less coupling, clear separation of concerns.
-- Unburdens filemanager from the orcabus event system completely and any business logic.
+- Unburdens filemanager from the event system and any business logic.
 
 **Disadvantages:**
 
-- Slower queries as there is indirection in API requests that require data aggregation.
+- Slower queries as there are multiple API requests that require data aggregation.
 - Possibly not warranted for just a `portal_run_id`, especially if the `portal_run_id` can just be statically obtained
   from the key path.
 
 > [!NOTE]
-> I think it depends on the scope of requirements whether having this separation is warranted. I think it's a clearer
-> design than having a single database it just depends on whether it's justified for something like the `portal_run_id`,
-> which could also be obtained from the key path.
+> I think it depends on the scope of requirements whether having this separation is justified. If the `portal_run_id`
+> can just be obtained from the key path then there might not be a reason to split.
 
 #### Diagrams
 
@@ -348,32 +347,33 @@ Diagrams for both a shared database and multiple databases are shown below.
 > It's not clear whether the data service would need to interact with the ingester service at all, if this service
 > exists in the first place.
 
-#### Should the filemanager just be part of orcahouse?
+#### Should the filemanager just be part of OrcaHouse?
 
-The orcahouse contains the data warehousing for OrcaBus in the orcavault. Instead of implementing a filemanager, the
-orcavault could be responsible for ingesting S3 metadata tables in its ETL process to support filemanager use-cases.
+The OrcaHouse contains the data warehousing for OrcaBus in the OrcaVault. Instead of implementing a filemanager, the
+Orcavault could be responsible for ingesting S3 metadata tables in its ETL process to support filemanager use-cases.
 
-Whether this is feasible or not depends on which requirements are needed from the filemanager. The focus of the orcahouse
+Whether this is feasible or not depends on which requirements are needed from the filemanager. The focus of the OrcaHouse
 is as a downstream process that aggregates all OrcaBus data sources. It is not intended to be used as part of orchestration
 itself. If the filemanager doesn't need to be involved in orchestration, or there are other solutions to filemanager
-use-cases, then it could be implemented as part of the orcahouse.
+use-cases, then it could be implemented as part of the OrcaHouse.
 
-One of the filemanager's use-cases is to support the orca-ui to serve data to users. This use-case will eventually be
-replaced by the orcahouse. Here it makes sense that the filemanager is not required directly. Another use case is object
-history tracking. Again, placing this requirement in the orcahouse makes more sense, if history tracking is never used
-for automation.
+One of the filemanager's use-cases is to support the OrcaUi to serve data to users. This use-case is intended to be
+handled by the OrcaHouse. Here it makes sense that the filemanager is not required directly. Another use case is object
+history tracking. Placing this requirement in the OrcaHouse potentially makes more sense if history tracking is never
+used for automation.
 
-However, there are automation use-cases for the filemanager as well (see below). Most of these use-cases stem from
+However, there seem to be automation use-cases for the filemanager as well (see below). Most of these use-cases stem from
 automation and querying around the `portal_run_id` and generating presigned URLs. These could potentially be replaced
 by other solutions. For example, a dedicated presign URL role could be used across any service that needs presigned URLs,
 and the `portal_run_id` could be obtained from the key path.
 
-Another use-case is tracking object moves. This is perhaps one of the stronger use-cases for the filemanager, as it may
-be harder for services to implement this logic on their own. There is also convenience for services using the filemanager
-so that they are not required to implement this on their own. Also, the filemanager represents a clearer security
-boundary for services interacting with S3, as it has all the permissions to view or presign files.
+Another use-case is tracking object moves. This is perhaps one of the stronger use-cases, as it may
+be harder for services to implement this logic on their own. There is also a convenience for services using the
+filemanager so that they are not required to implement this on their own. Another point is that the filemanager
+represents a clearer security boundary for services interacting with S3, as it has permissions to view or
+presign files in a single place.
 
-In terms of advantages of moving the filemanager to orcahouse, they are:
+Summarising moving the filemanager to OrcaHouse:
 
 **Advantages:**
 
@@ -383,23 +383,23 @@ In terms of advantages of moving the filemanager to orcahouse, they are:
 
 **Disadvantages:**
 
-- More fragmented service responsibilities as some services implement their own "micro-filemanager" logic.
+- More fragmented service responsibilities, some services may implement their own filemanager logic.
 - Possibly repeated code.
 - Less options for expanded use-cases like data moving, different backends or more advanced automation.
 - Less clear permission boundary for accessing files or creating presigned URLs.
 
 > [!NOTE]
-> One option would be to move certain use-cases to the orcahouse, while keeping a dedicated filemanager service for
-> others. For example, I think history tracking could easily just be part of orcahouse, as I'm not sure
-> that there are any orchestration use-cases for knowing object history.
+> One option would be to move some use-cases to the OrcaHouse, while keeping a dedicated filemanager service for
+> others. For example, I think history tracking could easily be part of OrcaHouse, as I'm not sure
+> that there are any automation use-cases for object history.
 
 #### Filemanager Current Uses
 
-The following is a list of current filemanager use-cases.
+The following is a list of current filemanager uses.
 
 > [!NOTE]
 > I think there should be a discussion on which of these use-cases will remain, which might not be necessary, or which
-> ones would be good future use-cases that aren't yet implemented.
+> ones are not yet implemented and would be good future use-cases.
 
 **Found using GitHub search:**
 
@@ -448,7 +448,7 @@ The following is a list of current filemanager use-cases.
 [req-4]: #4-allow-users-to-see-how-an-object-moves-between-locations
 [req-5]: #5-provide-long-lived-presigned-urls-to-objects
 [req-6]: #6-annotations-can-be-applied-to-single-objects-or-groups-of-objects
-[req-7]: #7-there-must-be-robust-checksumming-capabilities-to-find-identical-objects
+[req-7]: #7-there-must-be-checksumming-capabilities-to-find-identical-objects
 [req-8]: #8-annotate-objects-with-the-portal_run_id
 [req-9]: #9-allow-other-business-logic-annotations
 [req-10]: #10-allow-users-to-respond-to-any-annotation

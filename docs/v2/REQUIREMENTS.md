@@ -235,6 +235,11 @@ for the filemanager, which keep track of the state. The information flows from S
 to the inventory table to ensure that the state is consistent. The current state table represents all objects currently
 available on S3, and the history table represents historical records.
 
+When reconciling S3 events with S3 Metadata Tables, both the S3 events and journal table represent the same information.
+The journal table would be preferenced over time as a more accurate source of information. The inventory table would be
+considered the most accurate for the current state, however the events and journal table could be used to build an
+anticipated state before the inventory table is updated.
+
 > [!NOTE]
 > We could choose to allow the history table to grow forever, or eventually transition it every x months/years to a more
 > permanent storage, and away from an active table.

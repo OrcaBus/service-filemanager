@@ -228,7 +228,9 @@ pub fn api_router(state: AppState) -> Result<Router> {
         .merge(list_router())
         .merge(update_router())
         .merge(crawl_router())
-        .layer(Extension(QsQueryConfig::new(5, false)))
+        .layer(Extension(QsQueryConfig::new().config(
+            serde_qs::Config::new().use_form_encoding(true).max_depth(5),
+        )))
         .layer(cors_layer(state.config())?)
         .layer(TraceLayer::new_for_http())
         .with_state(state))

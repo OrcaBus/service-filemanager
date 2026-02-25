@@ -6,7 +6,7 @@ FROM public.ecr.aws/docker/library/rust:1.93 AS chef
 
 ENV SCCACHE_VERSION=0.13.0
 ENV CARGO_CHEF_VERSION=0.1.73
-ENV CARGO_BINSTALL_VERSION=1.17.3
+ENV CARGO_BINSTALL_VERSION=1.17.5
 
 ENV RUSTC_WRAPPER="/usr/local/cargo/bin/sccache"
 

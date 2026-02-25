@@ -34,7 +34,7 @@ sea-orm = { version = "1", default-features = false, features = [
     "with-uuid",
     "with-chrono"
 ] }
-strum = { version = "0.27", features = ["derive"] }
+strum = { version = "0.28", features = ["derive"] }
 
 # Query server
 axum = { version = "0.8", features = ["original-uri"] }
@@ -43,7 +43,7 @@ utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid", "url"] }
 utoipa-swagger-ui = { version = "9", features = ["axum", "debug-embed", "url"] }
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["trace", "cors"] }
-serde_qs = { version = "0.15", features = ["axum"] }
+serde_qs = { version = "1", features = ["axum"] }
 json-patch = "4"
 
 # General
@@ -53,7 +53,7 @@ uuid = { version = "1", features = ["v7"] }
 itertools = "0.14"
 url = { version = "2", features = ["serde"] }
 envy = "0.4"
-rand = "0.9"
+rand = "0.10"
 parse-size = "1"
 humantime = "2"
 percent-encoding = "2"

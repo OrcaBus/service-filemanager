@@ -137,6 +137,7 @@ export class Function extends Construct {
         props.securityGroup,
       ],
       functionName: props.functionName,
+      runtime: 'provided.al2023',
     });
 
     // TODO: this should probably connect to an RDS proxy rather than directly to the database.

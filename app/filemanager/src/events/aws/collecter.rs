@@ -30,6 +30,7 @@ use chrono::{DateTime, Utc};
 use futures::TryFutureExt;
 use futures::future::join_all;
 use itertools::Itertools;
+use sea_orm::{ConnectionTrait, DatabaseConnection};
 use std::collections::HashSet;
 use std::str::FromStr;
 use tracing::{trace, warn};
@@ -87,11 +88,22 @@ impl CollecterBuilder {
         raw_events: FlatS3EventMessages,
         config: &'a Config,
         client: &'a database::Client,
-    ) -> Collecter<'a> {
+    ) -> Collecter<'a, DatabaseConnection> {
+        self.build_with_connection(raw_events, config, client.connection_ref())
+            .await
+    }
+
+    /// Build a collector using a connection trait and raw events.
+    pub async fn build_with_connection<'a, C: ConnectionTrait>(
+        self,
+        raw_events: FlatS3EventMessages,
+        config: &'a Config,
+        conn: &'a C,
+    ) -> Collecter<'a, C> {
         if let Some(s3_client) = self.s3_client {
             Collecter::new(
                 s3_client,
-                client,
+                conn,
                 raw_events,
                 config,
                 self.crawl_bucket,
@@ -100,7 +112,7 @@ impl CollecterBuilder {
         } else {
             Collecter::new(
                 S3Client::with_defaults().await,
-                client,
+                conn,
                 raw_events,
                 config,
                 self.crawl_bucket,
@@ -142,7 +154,7 @@ impl CollecterBuilder {
         mut self,
         config: &'a Config,
         database_client: &'a database::Client,
-    ) -> Result<Collecter<'a>> {
+    ) -> Result<Collecter<'a, DatabaseConnection>> {
         let url = self.sqs_url.take();
         let url = Config::value_or_else(url.as_deref(), config.sqs_url())?;
 
@@ -171,9 +183,9 @@ impl CollecterBuilder {
 /// number of (potentially duplicate) records that are processed by this collector. The number of
 /// records is None before any events have been processed.
 #[derive(Debug)]
-pub struct Collecter<'a> {
+pub struct Collecter<'a, C> {
     client: S3Client,
-    database_client: &'a database::Client,
+    conn: &'a C,
     raw_events: FlatS3EventMessages,
     config: &'a Config,
     n_records: Option<usize>,
@@ -181,11 +193,53 @@ pub struct Collecter<'a> {
     crawl_prefix: Option<String>,
 }
 
-impl<'a> Collecter<'a> {
+/// The categorization of the number of records from a crawl request.
+#[derive(Debug, Clone, Default)]
+pub struct CrawlNRecords {
+    n_records_create: usize,
+    n_records_delete: usize,
+    n_records_null_sequencer: usize,
+}
+
+impl CrawlNRecords {
+    /// Create a new crawl records struct.
+    pub fn new(
+        n_records_create: usize,
+        n_records_delete: usize,
+        n_records_null_sequencer: usize,
+    ) -> Self {
+        Self {
+            n_records_create,
+            n_records_delete,
+            n_records_null_sequencer,
+        }
+    }
+
+    /// Get the number of records that result in a created event. This does not include records
+    /// created due to updating a null sequencer.
+    pub fn n_records_created(&self) -> usize {
+        self.n_records_create
+    }
+
+    /// Get the number of records that result in a deleted event.
+    pub fn n_records_deleted(&self) -> usize {
+        self.n_records_delete
+    }
+
+    /// Get the number of records that result in an update to a null sequencer value.
+    pub fn n_records_null_sequencer(&self) -> usize {
+        self.n_records_null_sequencer
+    }
+}
+
+impl<'a, C> Collecter<'a, C>
+where
+    C: ConnectionTrait,
+{
     /// Create a new collector.
     pub(crate) fn new(
         client: S3Client,
-        database_client: &'a database::Client,
+        conn: &'a C,
         raw_events: FlatS3EventMessages,
         config: &'a Config,
         crawl_bucket: Option<String>,
@@ -193,7 +247,7 @@ impl<'a> Collecter<'a> {
     ) -> Self {
         Self {
             client,
-            database_client,
+            conn,
             raw_events,
             config,
             n_records: None,
@@ -207,7 +261,7 @@ impl<'a> Collecter<'a> {
         self,
     ) -> (
         S3Client,
-        &'a database::Client,
+        &'a C,
         FlatS3EventMessages,
         &'a Config,
         Option<String>,
@@ -215,7 +269,7 @@ impl<'a> Collecter<'a> {
     ) {
         (
             self.client,
-            self.database_client,
+            self.conn,
             self.raw_events,
             self.config,
             self.crawl_bucket,
@@ -308,7 +362,7 @@ impl<'a> Collecter<'a> {
     pub async fn tagging(
         config: &Config,
         client: &S3Client,
-        database_client: &database::Client,
+        conn: &C,
         event: FlatS3EventMessage,
     ) -> Result<FlatS3EventMessage> {
         let tagging = client
@@ -393,13 +447,12 @@ impl<'a> Collecter<'a> {
             ingest_id: vec![ingest_id].into(),
             ..Default::default()
         };
-        let moved_object =
-            ListQueryBuilder::<_, s3_object::Entity>::new(database_client.connection_ref())
-                .filter_all(filter, true, false)?
-                .one()
-                .await
-                .ok()
-                .flatten();
+        let moved_object = ListQueryBuilder::<_, s3_object::Entity>::new(conn)
+            .filter_all(filter, true, false)?
+            .one()
+            .await
+            .ok()
+            .flatten();
 
         // Update the new record with the attributes if possible, or return the new record without
         // the attributes if not possible.
@@ -416,16 +469,16 @@ impl<'a> Collecter<'a> {
 
     /// Updates events that are crawls to take into account the existing database state.
     pub async fn update_crawl_events(
-        database_client: &database::Client,
+        conn: &C,
         events: FlatS3EventMessages,
         crawl_bucket: String,
         crawl_prefix: Option<String>,
-    ) -> Result<FlatS3EventMessages> {
+    ) -> Result<(FlatS3EventMessages, CrawlNRecords)> {
         // Get crawl list object details ensuring that all object versions are taken into account.
         // Note that this fetches non-current objects too in order to crawl old object versions.
         // This gets the most current record for each object version.
         let database_state: Vec<FlatS3EventMessage> =
-            ListQueryBuilder::<_, s3_object::Entity>::new(database_client.connection_ref())
+            ListQueryBuilder::<_, s3_object::Entity>::new(conn)
                 .filter_all(
                     S3ObjectsFilter {
                         bucket: Wildcard::new(crawl_bucket).into(),
@@ -534,6 +587,9 @@ impl<'a> Collecter<'a> {
         })
         .collect_vec();
 
+        let n_created = diff_created.len();
+        let n_deleted = diff_deleted.len();
+        let n_null_sequencer = always_update.len();
         let diff = [
             always_update.into_iter().collect_vec(),
             diff_created,
@@ -544,18 +600,21 @@ impl<'a> Collecter<'a> {
         ]
         .concat();
 
-        Ok(FlatS3EventMessages::from(diff))
+        Ok((
+            FlatS3EventMessages::from(diff),
+            CrawlNRecords::new(n_created, n_deleted, n_null_sequencer),
+        ))
     }
 
     /// Process events and add header and datetime fields.
     pub async fn update_events(
         config: &Config,
         client: &S3Client,
-        database_client: &database::Client,
+        conn: &C,
         events: FlatS3EventMessages,
         crawl_bucket: Option<String>,
         crawl_prefix: Option<String>,
-    ) -> Result<FlatS3EventMessages> {
+    ) -> Result<(FlatS3EventMessages, Option<CrawlNRecords>)> {
         let events = FlatS3EventMessages(
             join_all(events.into_inner().into_iter().map(|event| async move {
                 // No need to run this unnecessarily on removed events.
@@ -567,7 +626,7 @@ impl<'a> Collecter<'a> {
                 trace!(key = ?event.key, bucket = ?event.bucket, "updating event");
 
                 let event = Self::head(client, event).await;
-                Self::tagging(config, client, database_client, event).await
+                Self::tagging(config, client, conn, event).await
             }))
             .await
             .into_iter()
@@ -575,9 +634,11 @@ impl<'a> Collecter<'a> {
         );
 
         if let Some(crawl_bucket) = crawl_bucket {
-            Self::update_crawl_events(database_client, events, crawl_bucket, crawl_prefix).await
+            Self::update_crawl_events(conn, events, crawl_bucket, crawl_prefix)
+                .await
+                .map(|(events, crawl)| (events, Some(crawl)))
         } else {
-            Ok(events)
+            Ok((events, None))
         }
     }
 
@@ -594,14 +655,17 @@ impl From<BuildError> for Error {
 }
 
 #[async_trait]
-impl Collect for Collecter<'_> {
+impl<C> Collect for Collecter<'_, C>
+where
+    C: ConnectionTrait,
+{
     async fn collect(mut self) -> Result<EventSource> {
         let (client, database_client, events, config, crawl_bucket, crawl_prefix) =
             self.into_inner();
 
         let events = events.sort_and_dedup();
 
-        let events = Self::update_events(
+        let (events, crawl) = Self::update_events(
             config,
             &client,
             database_client,
@@ -618,11 +682,13 @@ impl Collect for Collecter<'_> {
             Ok(EventSource::new(
                 EventSourceType::S3Paired(events.into()),
                 n_records,
+                crawl,
             ))
         } else {
             Ok(EventSource::new(
                 EventSourceType::S3(TransposedS3EventMessages::from(events)),
                 n_records,
+                crawl,
             ))
         }
     }
@@ -705,7 +771,7 @@ pub(crate) mod tests {
 
     #[test]
     fn convert_datetime() {
-        let result = Collecter::convert_datetime(Some(
+        let result = Collecter::<DatabaseConnection>::convert_datetime(Some(
             primitives::DateTime::from_str("1970-01-01T00:00:00Z", DateTimeFormat::DateTime)
                 .unwrap(),
         ));
@@ -725,7 +791,7 @@ pub(crate) mod tests {
             expected_head_object(),
         )]);
 
-        let result = Collecter::head(
+        let result = Collecter::<DatabaseConnection>::head(
             &collecter.client,
             expected_s3_event_message().with_version_id(default_version_id()),
         )
@@ -753,7 +819,7 @@ pub(crate) mod tests {
             })
             .then_error(expected_head_object_not_found)]);
 
-        let result = Collecter::head(
+        let result = Collecter::<DatabaseConnection>::head(
             &collecter.client,
             expected_s3_event_message().with_version_id(default_version_id()),
         )
@@ -774,12 +840,19 @@ pub(crate) mod tests {
 
         collecter.client = s3_client_expectations();
 
-        let mut result =
-            Collecter::update_events(&config, &collecter.client, &client, events, None, None)
-                .await
-                .unwrap()
-                .into_inner()
-                .into_iter();
+        let mut result = Collecter::update_events(
+            &config,
+            &collecter.client,
+            client.connection_ref(),
+            events,
+            None,
+            None,
+        )
+        .await
+        .unwrap()
+        .0
+        .into_inner()
+        .into_iter();
 
         let first = result.next().unwrap();
         assert_eq!(first.storage_class, Some(IntelligentTiering));
@@ -1097,10 +1170,10 @@ pub(crate) mod tests {
     pub(crate) async fn test_collecter<'a>(
         config: &'a Config,
         database_client: &'a Client,
-    ) -> Collecter<'a> {
+    ) -> Collecter<'a, DatabaseConnection> {
         Collecter::new(
             mock_s3(&[]),
-            database_client,
+            database_client.connection_ref(),
             expected_flat_events_simple(),
             config,
             None,

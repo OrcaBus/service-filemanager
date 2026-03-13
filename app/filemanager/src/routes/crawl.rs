@@ -8,9 +8,9 @@ use crate::database::entities::sea_orm_active_enums::CrawlStatus;
 use crate::database::entities::sea_orm_active_enums::CrawlStatus::InProgress;
 use crate::error::Error::{CrawlError, ExpectedSomeValue};
 use crate::error::{Error, Result};
-use crate::events::Collect;
 use crate::events::aws::collecter::CollecterBuilder;
-use crate::events::aws::crawl;
+use crate::events::aws::{FlatS3EventMessages, crawl};
+use crate::events::{Collect, EventSource};
 use crate::queries::get::GetQueryBuilder;
 use crate::queries::list::ListQueryBuilder;
 use crate::routes::AppState;
@@ -29,7 +29,10 @@ use axum::{Router, extract};
 use axum_extra::extract::WithRejection;
 use chrono::{TimeDelta, Utc};
 use sea_orm::ActiveValue::Set;
-use sea_orm::{ActiveModelTrait, ConnectionTrait, EntityTrait, IntoActiveModel, TransactionTrait};
+use sea_orm::{
+    ActiveModelTrait, ConnectionTrait, DatabaseTransaction, EntityTrait, IntoActiveModel,
+    TransactionTrait,
+};
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use utoipa::{IntoParams, ToSchema};
@@ -68,7 +71,26 @@ impl CrawlRequest {
     }
 }
 
-/// Crawl S3, updating existing records and adding new ones into the database based on `ListObjects`.
+/// The result from a dry run crawl request.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema, Eq, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CrawlDryRunResult {
+    /// The bucket used for the request.
+    pub bucket: String,
+    /// The prefix used for the request.
+    pub prefix: Option<String>,
+    /// The number of objects that would be updated.
+    pub n_objects: usize,
+    /// The number of new `Created` events that would be inserted. This does not include created events
+    /// resulting from updating a null sequencer.
+    pub n_objects_created: usize,
+    /// The number of new `Deleted` events that would be inserted.
+    pub n_objects_deleted: usize,
+    /// The number of new `Created` events that would be inserted to fix an existing null sequencer.
+    pub n_objects_null_sequencer: usize,
+}
+
+/// Crawl S3, updating existing records and adding new ones into the database based on `ListObjectVersions`.
 /// Only one crawl can be run at a time for a specific bucket. The crawl is atomic, so if it fails,
 /// no new records will be ingested.
 ///
@@ -109,7 +131,52 @@ pub async fn crawl_s3(
     Ok(NoContent)
 }
 
-/// Crawl S3, updating existing records and adding new ones into the database based on `ListObjects`.
+/// Perform a dry-run of a crawl operation as specified by the /api/v1/s3/crawl/sync or /api/v1/s3/crawl
+/// endpoint. This will not persist any data to the filemanager database. It will however perform
+/// a `ListObjectVersions` on the crawl bucket and prefix, and determine the records that would be
+/// inserted if the crawl was live.
+#[utoipa::path(
+    post,
+    path = "/s3/crawl/dry-run",
+    responses(
+        (status = OK, description = "The result of the crawl", body = Crawl),
+        ErrorStatusCode,
+    ),
+    request_body = CrawlRequest,
+    context_path = "/api/v1",
+    tag = "crawl",
+)]
+pub async fn crawl_s3_dry_run(
+    state: State<AppState>,
+    WithRejection(extract::Json(crawl), _): Json<CrawlRequest>,
+) -> Result<extract::Json<CrawlDryRunResult>> {
+    let conn = state.database_client().connection_ref().begin().await?;
+    let crawl_result = crawl_s3_impl(state.clone(), &crawl.bucket, crawl.prefix.clone()).await?;
+    let (_, n_records, crawl_n_records) = collect_events(
+        state.clone(),
+        &crawl.bucket,
+        crawl.prefix.clone(),
+        crawl_result,
+        &conn,
+    )
+    .await?
+    .into_inner();
+    // Nothing to update.
+    conn.rollback().await?;
+
+    let crawl_n_records = crawl_n_records.unwrap_or_default();
+
+    Ok(extract::Json(CrawlDryRunResult {
+        bucket: crawl.bucket,
+        prefix: crawl.prefix,
+        n_objects: n_records,
+        n_objects_created: crawl_n_records.n_records_created(),
+        n_objects_deleted: crawl_n_records.n_records_deleted(),
+        n_objects_null_sequencer: crawl_n_records.n_records_null_sequencer(),
+    }))
+}
+
+/// Crawl S3, updating existing records and adding new ones into the database based on `ListObjectVersions`.
 /// Only one crawl can be run at a time for a specific bucket. The crawl is atomic, so if it fails,
 /// no new records will be ingested.
 ///
@@ -178,33 +245,29 @@ pub async fn crawl_sync_s3(
     };
 
     // Get crawl list object details ensuring that the current database state is taken into account.
-    let crawl_result = crawl::Crawl::new(state.s3_client().clone())
-        .crawl_s3(&crawl.bucket, crawl.prefix.clone())
-        .await;
+    let crawl_result = crawl_s3_impl(state.clone(), &crawl.bucket, crawl.prefix.clone()).await;
 
     if let Err(err) = crawl_result {
         set_failed(crawl_execution).await?;
         return Err(err);
     }
-
     let crawl_result = crawl_result?;
-    let n_events = i64::try_from(crawl_result.0.len())?;
 
     // Update events.
-    let events = CollecterBuilder::default()
-        .with_crawl_bucket(crawl.bucket)
-        .with_crawl_prefix(crawl.prefix)
-        .with_s3_client(state.s3_client().clone())
-        .build(crawl_result, state.config(), state.database_client())
-        .await
-        .collect()
-        .await;
+    let events = collect_events(
+        state.clone(),
+        &crawl.bucket,
+        crawl.prefix,
+        crawl_result,
+        &conn,
+    )
+    .await;
     if let Err(err) = events {
         set_failed(crawl_execution).await?;
         return Err(err);
     }
 
-    let events = events?.into_inner().0;
+    let (events, n_events, _) = events?.into_inner();
 
     // Ingest events.
     if let Err(err) = state.database_client().ingest(events).await {
@@ -214,10 +277,9 @@ pub async fn crawl_sync_s3(
 
     // Update crawl entry.
     crawl_execution.status = Set(CrawlStatus::Completed);
-    crawl_execution.execution_time_seconds = Set(Some(i32::try_from(
-        now.signed_duration_since(Utc::now()).abs().num_seconds(),
-    )?));
-    crawl_execution.n_objects = Set(Some(n_events));
+    crawl_execution.execution_time_seconds =
+        Set(i32::try_from(now.signed_duration_since(Utc::now()).abs().num_seconds()).ok());
+    crawl_execution.n_objects = Set(i64::try_from(n_events).ok());
     crawl_execution.clone().update(&conn).await?;
 
     let entry = s3_crawl::Entity::find_by_id(uuid)
@@ -296,17 +358,6 @@ pub async fn count_crawl_s3(
     count_crawl_with_connection(state.database_client().connection_ref(), wildcard, filter).await
 }
 
-async fn count_crawl_with_connection<C: ConnectionTrait>(
-    connection: &C,
-    WithRejection(extract::Query(wildcard), _): Query<WildcardParams>,
-    WithRejection(serde_qs::axum::QsQuery(filter), _): QsQuery<S3CrawlFilter>,
-) -> Result<extract::Json<ListCount>> {
-    let response = ListQueryBuilder::<_, s3_crawl::Entity>::new(connection)
-        .filter_all(filter, wildcard.case_sensitive())?;
-
-    Ok(extract::Json(response.to_list_count().await?))
-}
-
 /// Get the crawl execution using the id.
 #[utoipa::path(
     get,
@@ -340,6 +391,44 @@ pub fn crawl_router() -> Router<AppState> {
         .route("/s3/crawl/status", get(list_crawl_s3))
         .route("/s3/crawl/status/count", get(count_crawl_s3))
         .route("/s3/crawl/status/{id}", get(get_crawl_s3_by_id))
+}
+
+async fn count_crawl_with_connection<C: ConnectionTrait>(
+    connection: &C,
+    WithRejection(extract::Query(wildcard), _): Query<WildcardParams>,
+    WithRejection(serde_qs::axum::QsQuery(filter), _): QsQuery<S3CrawlFilter>,
+) -> Result<extract::Json<ListCount>> {
+    let response = ListQueryBuilder::<_, s3_crawl::Entity>::new(connection)
+        .filter_all(filter, wildcard.case_sensitive())?;
+
+    Ok(extract::Json(response.to_list_count().await?))
+}
+
+async fn crawl_s3_impl(
+    state: State<AppState>,
+    bucket: &str,
+    prefix: Option<String>,
+) -> Result<FlatS3EventMessages> {
+    crawl::Crawl::new(state.s3_client().clone())
+        .crawl_s3(bucket, prefix)
+        .await
+}
+
+async fn collect_events(
+    state: State<AppState>,
+    bucket: &str,
+    prefix: Option<String>,
+    crawl_result: FlatS3EventMessages,
+    conn: &DatabaseTransaction,
+) -> Result<EventSource> {
+    CollecterBuilder::default()
+        .with_crawl_bucket(bucket)
+        .with_crawl_prefix(prefix)
+        .with_s3_client(state.s3_client().clone())
+        .build_with_connection(crawl_result, state.config(), conn)
+        .await
+        .collect()
+        .await
 }
 
 #[cfg(test)]

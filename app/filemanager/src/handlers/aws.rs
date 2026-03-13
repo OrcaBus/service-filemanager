@@ -32,7 +32,7 @@ pub async fn receive_and_ingest<'a>(
     database_client: &'a Client,
     env_config: &'a EnvConfig,
 ) -> Result<usize> {
-    let (events, n_records) = CollecterBuilder::default()
+    let (events, n_records, _) = CollecterBuilder::default()
         .with_s3_client(s3_client)
         .with_sqs_client(sqs_client)
         .set_sqs_url(sqs_url)

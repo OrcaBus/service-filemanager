@@ -67,29 +67,24 @@ impl Query {
     ) -> Result<()> {
         // Remove duplicate combinations of (bucket, key) as it's unnecessary to call multiple times.
         // Also sort to ensure locking is consistent.
-        let (buckets, keys): (Vec<_>, Vec<_>) = buckets
+        let (buckets, keys, locks): (Vec<_>, Vec<_>, Vec<_>) = buckets
             .into_iter()
             .zip(keys)
             .collect::<HashSet<_>>()
             .into_iter()
-            .sorted()
-            .unzip();
-
-        // Calculate the locks using the existing sqlx implementation.
-        let lock_keys: Vec<i64> = buckets
-            .iter()
-            .zip(keys.iter())
             .map(|(bucket, key)| {
-                PgAdvisoryLock::new(format!("{bucket}/{key}"))
+                let lock = PgAdvisoryLock::new(format!("{bucket}/{key}"))
                     .key()
                     .as_bigint()
-                    .expect("new only creates the bigint variety")
+                    .expect("new only creates the bigint variety");
+                (bucket, key, lock)
             })
-            .collect();
+            .sorted()
+            .multiunzip();
 
         let conn = conn.acquire().await?;
         query("select pg_advisory_xact_lock(lock_id) from unnest($1::bigint[]) as lock_values (lock_id)")
-            .bind(&lock_keys)
+            .bind(&locks)
             .execute(&mut *conn)
             .await?;
 

@@ -2,9 +2,9 @@
 //!
 
 use async_trait::async_trait;
+use sqlx::PgConnection;
 use sqlx::migrate;
 use sqlx::migrate::Migrator;
-use sqlx::PgConnection;
 use tracing::trace;
 
 use crate::database::aws::query::Query;
@@ -86,7 +86,7 @@ impl Migrate for Migration {
         let mut conn = self.client().pool().acquire().await?;
         self.reset_current_state(&mut conn).await?;
         Self::migrator()
-            .run_direct(&mut *conn)
+            .run(self.client().pool())
             .await
             .map_err(|err| MigrateError(err.to_string()))
     }

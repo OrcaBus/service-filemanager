@@ -408,5 +408,13 @@ pub(crate) mod tests {
         .fetch_all(pool)
         .await
         .unwrap();
+
+        query(include_str!(
+            "../../../database/queries/api/reset_current_state.sql"
+        ))
+            .bind(vec!["bucket".to_string()])
+            .bind(vec!["key".to_string()])
+            .execute(pool)
+            .await.unwrap();
     }
 }

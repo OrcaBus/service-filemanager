@@ -44,14 +44,16 @@ impl Migration {
     }
 
     /// Fix any existing `is_current_state` issues before the unique index specified by the 0008
-    /// migration is applied.
-    async fn fix_current_state(&self, conn: &mut PgConnection) -> Result<()> {
+    /// migration is applied. This is called here so that the `reset_current_state` function
+    /// can be re-used.
+    async fn reset_current_state(&self, conn: &mut PgConnection) -> Result<()> {
+        // Avoid error if these migrations don't exist yet or s3_object hasn't been created.
         let already_applied: bool = sqlx::query_scalar(
             "select exists (select 1 from _sqlx_migrations where version = 8 and success)",
         )
         .fetch_one(&mut *conn)
         .await
-        .unwrap_or(false);
+            .unwrap_or_default();
 
         if already_applied {
             return Ok(());
@@ -60,15 +62,18 @@ impl Migration {
         let (buckets, keys): (Vec<String>, Vec<String>) =
             sqlx::query_as("select distinct bucket, key from s3_object")
                 .fetch_all(&mut *conn)
-                .await?
+                .await
+                .unwrap_or_default()
                 .into_iter()
                 .unzip();
 
-        let mut tx = conn.begin().await?;
+        if buckets.is_empty() {
+            return Ok(());
+        }
+
         Query::new(self.client.clone())
-            .reset_current_state(&mut tx, buckets, keys)
+            .reset_current_state(conn, buckets, keys)
             .await?;
-        tx.commit().await?;
 
         Ok(())
     }
@@ -79,7 +84,7 @@ impl Migrate for Migration {
     async fn migrate(&self) -> Result<()> {
         trace!("applying migrations");
         let mut conn = self.client().pool().acquire().await?;
-        self.fix_current_state(&mut conn).await?;
+        self.reset_current_state(&mut conn).await?;
         Self::migrator()
             .run_direct(&mut *conn)
             .await
@@ -107,6 +112,12 @@ pub(crate) mod tests {
         let s3_object_exists = check_table_exists(&migrate, "s3_object").await;
         assert!(!s3_object_exists.get::<bool, _>("exists"));
 
+        migrate.migrate().await.unwrap();
+
+        let s3_object_exists = check_table_exists(&migrate, "s3_object").await;
+        assert!(s3_object_exists.get::<bool, _>("exists"));
+
+        // Migrating again shouldn't be an issue.
         migrate.migrate().await.unwrap();
 
         let s3_object_exists = check_table_exists(&migrate, "s3_object").await;

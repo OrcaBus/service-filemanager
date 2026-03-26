@@ -77,7 +77,9 @@ impl Query {
         let conn = conn.acquire().await?;
 
         // Acquire a transaction advisory lock per (bucket, key) pair used to prevent issue with
-        // writing to database on stale data.
+        // writing to database on stale data. At worst this locks all rows with the same bucket
+        // and key, which can happen if there are duplicate events from a simultaneous crawl, or
+        // multiple versions for the same object.
         query(
             "select pg_advisory_xact_lock(hashtext(bucket), hashtext(key)) \
              from unnest($1::text[], $2::text[]) as bucket_key (bucket, key)",

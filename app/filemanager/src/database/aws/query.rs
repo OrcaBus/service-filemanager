@@ -148,13 +148,32 @@ mod tests {
         Ingester::ingest_query(&events, &mut pool.acquire().await.unwrap())
             .await
             .unwrap();
+        Query::new(Client::from_pool(pool.clone()))
+            .reset_current_state(&mut pool.acquire().await.unwrap(), events.buckets, events.keys)
+            .await
+            .unwrap();
+
         Ingester::ingest_query(&increase_date, &mut pool.acquire().await.unwrap())
             .await
             .unwrap();
+        Query::new(Client::from_pool(pool.clone()))
+            .reset_current_state(&mut pool.acquire().await.unwrap(), increase_date.buckets, increase_date.keys)
+            .await
+            .unwrap();
+
         Ingester::ingest_query(&different_key, &mut pool.acquire().await.unwrap())
             .await
             .unwrap();
+        Query::new(Client::from_pool(pool.clone()))
+            .reset_current_state(&mut pool.acquire().await.unwrap(), different_key.buckets, different_key.keys)
+            .await
+            .unwrap();
+
         Ingester::ingest_query(&different_key_and_date, &mut pool.acquire().await.unwrap())
+            .await
+            .unwrap();
+        Query::new(Client::from_pool(pool.clone()))
+            .reset_current_state(&mut pool.acquire().await.unwrap(), different_key_and_date.buckets, different_key_and_date.keys)
             .await
             .unwrap();
 

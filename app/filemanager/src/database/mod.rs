@@ -412,9 +412,10 @@ pub(crate) mod tests {
         query(include_str!(
             "../../../database/queries/api/reset_current_state.sql"
         ))
-            .bind(vec!["bucket".to_string()])
-            .bind(vec!["key".to_string()])
-            .execute(pool)
-            .await.unwrap();
+        .bind(vec!["bucket".to_string()])
+        .bind(vec!["key".to_string()])
+        .execute(pool)
+        .await
+        .unwrap();
     }
 }

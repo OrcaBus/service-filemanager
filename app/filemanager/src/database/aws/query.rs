@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use sqlx::postgres::PgAdvisoryLock;
 use sqlx::{Acquire, PgConnection, Postgres, Transaction, query, query_as};
 use std::collections::HashSet;
 
@@ -74,20 +75,23 @@ impl Query {
             .sorted()
             .unzip();
 
-        let conn = conn.acquire().await?;
+        // Calculate the locks using the existing sqlx implementation.
+        let lock_keys: Vec<i64> = buckets
+            .iter()
+            .zip(keys.iter())
+            .map(|(bucket, key)| {
+                PgAdvisoryLock::new(format!("{bucket}/{key}"))
+                    .key()
+                    .as_bigint()
+                    .expect("new only creates the bigint variety")
+            })
+            .collect();
 
-        // Acquire a transaction advisory lock per (bucket, key) pair used to prevent issue with
-        // writing to database on stale data. At worst this locks all rows with the same bucket
-        // and key, which can happen if there are duplicate events from a simultaneous crawl, or
-        // multiple versions for the same object.
-        query(
-            "select pg_advisory_xact_lock(hashtext(bucket), hashtext(key)) \
-             from unnest($1::text[], $2::text[]) as bucket_key (bucket, key)",
-        )
-        .bind(&buckets)
-        .bind(&keys)
-        .execute(&mut *conn)
-        .await?;
+        let conn = conn.acquire().await?;
+        query("select pg_advisory_xact_lock(lock_id) from unnest($1::bigint[]) as lock_values (lock_id)")
+            .bind(&lock_keys)
+            .execute(&mut *conn)
+            .await?;
 
         query(include_str!(
             "../../../../database/queries/api/reset_current_state.sql"
@@ -149,7 +153,11 @@ mod tests {
             .await
             .unwrap();
         Query::new(Client::from_pool(pool.clone()))
-            .reset_current_state(&mut pool.acquire().await.unwrap(), events.buckets, events.keys)
+            .reset_current_state(
+                &mut pool.acquire().await.unwrap(),
+                events.buckets,
+                events.keys,
+            )
             .await
             .unwrap();
 
@@ -157,7 +165,11 @@ mod tests {
             .await
             .unwrap();
         Query::new(Client::from_pool(pool.clone()))
-            .reset_current_state(&mut pool.acquire().await.unwrap(), increase_date.buckets, increase_date.keys)
+            .reset_current_state(
+                &mut pool.acquire().await.unwrap(),
+                increase_date.buckets,
+                increase_date.keys,
+            )
             .await
             .unwrap();
 
@@ -165,7 +177,11 @@ mod tests {
             .await
             .unwrap();
         Query::new(Client::from_pool(pool.clone()))
-            .reset_current_state(&mut pool.acquire().await.unwrap(), different_key.buckets, different_key.keys)
+            .reset_current_state(
+                &mut pool.acquire().await.unwrap(),
+                different_key.buckets,
+                different_key.keys,
+            )
             .await
             .unwrap();
 
@@ -173,7 +189,11 @@ mod tests {
             .await
             .unwrap();
         Query::new(Client::from_pool(pool.clone()))
-            .reset_current_state(&mut pool.acquire().await.unwrap(), different_key_and_date.buckets, different_key_and_date.keys)
+            .reset_current_state(
+                &mut pool.acquire().await.unwrap(),
+                different_key_and_date.buckets,
+                different_key_and_date.keys,
+            )
             .await
             .unwrap();
 

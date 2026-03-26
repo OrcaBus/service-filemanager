@@ -2,13 +2,13 @@
 //!
 
 use async_trait::async_trait;
-use sqlx::{Acquire, PgConnection};
 use sqlx::migrate;
 use sqlx::migrate::Migrator;
+use sqlx::PgConnection;
 use tracing::trace;
 
-use crate::database::{Client, CredentialGenerator, Migrate};
 use crate::database::aws::query::Query;
+use crate::database::{Client, CredentialGenerator, Migrate};
 use crate::env::Config;
 use crate::error::Error::MigrateError;
 use crate::error::Result;
@@ -53,7 +53,7 @@ impl Migration {
         )
         .fetch_one(&mut *conn)
         .await
-            .unwrap_or_default();
+        .unwrap_or_default();
 
         if already_applied {
             return Ok(());

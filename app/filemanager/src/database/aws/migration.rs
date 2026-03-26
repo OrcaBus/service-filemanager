@@ -47,14 +47,11 @@ impl Migration {
     /// migration is applied.
     async fn fix_current_state(&self, conn: &mut PgConnection) -> Result<()> {
         let already_applied: bool = sqlx::query_scalar(
-            "select exists (
-                select 1 from pg_indexes
-                where schemaname = 'public'
-                and indexname = 's3_object_current_state_unique'
-            )",
+            "select exists (select 1 from _sqlx_migrations where version = 8 and success)",
         )
         .fetch_one(&mut *conn)
-        .await?;
+        .await
+        .unwrap_or(false);
 
         if already_applied {
             return Ok(());

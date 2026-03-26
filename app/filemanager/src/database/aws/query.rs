@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use sqlx::{Acquire, PgConnection, Postgres, Transaction, query, query_as};
 use std::collections::HashSet;
 
@@ -64,11 +65,27 @@ impl Query {
         keys: Vec<String>,
     ) -> Result<()> {
         // Remove duplicate combinations of (bucket, key) as it's unnecessary to call multiple times.
-        let bucket_key_pairs: HashSet<_> =
-            HashSet::from_iter(buckets.into_iter().zip(keys.into_iter()));
-        let (buckets, keys): (Vec<_>, Vec<_>) = bucket_key_pairs.into_iter().unzip();
+        // Also sort to ensure locking is consistent.
+        let (buckets, keys): (Vec<_>, Vec<_>) = buckets
+            .into_iter()
+            .zip(keys)
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .sorted()
+            .unzip();
 
         let conn = conn.acquire().await?;
+
+        // Acquire a transaction advisory lock per (bucket, key) pair used to prevent issue with
+        // writing to database on stale data.
+        query(
+            "select pg_advisory_xact_lock(hashtext(bucket), hashtext(key)) \
+             from unnest($1::text[], $2::text[]) as bucket_key (bucket, key)",
+        )
+        .bind(&buckets)
+        .bind(&keys)
+        .execute(&mut *conn)
+        .await?;
 
         query(include_str!(
             "../../../../database/queries/api/reset_current_state.sql"

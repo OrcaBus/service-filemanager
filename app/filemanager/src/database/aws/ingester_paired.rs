@@ -5,6 +5,7 @@
 use sqlx::{query, query_as};
 use tracing::{debug, trace};
 
+use crate::database::aws::query::Query;
 use crate::database::{Client, CredentialGenerator};
 use crate::env::Config;
 use crate::error::Result;
@@ -170,6 +171,14 @@ impl IngesterPaired {
         .bind(vec![Other; object_deleted.s3_object_ids.len()])
         .fetch_all(&mut *tx)
         .await?;
+
+        let mut all_buckets = object_created.buckets.clone();
+        let mut all_keys = object_created.keys.clone();
+        all_buckets.extend(object_deleted.buckets.iter().cloned());
+        all_keys.extend(object_deleted.keys.iter().cloned());
+        Query::new(self.client.clone())
+            .reset_current_state(&mut tx, all_buckets, all_keys)
+            .await?;
 
         tx.commit().await?;
 

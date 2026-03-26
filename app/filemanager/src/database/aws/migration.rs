@@ -2,11 +2,13 @@
 //!
 
 use async_trait::async_trait;
+use sqlx::{Acquire, PgConnection};
 use sqlx::migrate;
 use sqlx::migrate::Migrator;
 use tracing::trace;
 
 use crate::database::{Client, CredentialGenerator, Migrate};
+use crate::database::aws::query::Query;
 use crate::env::Config;
 use crate::error::Error::MigrateError;
 use crate::error::Result;
@@ -40,14 +42,49 @@ impl Migration {
     pub fn client(&self) -> &Client {
         &self.client
     }
+
+    /// Fix any existing `is_current_state` issues before the unique index specified by the 0008
+    /// migration is applied.
+    async fn fix_current_state(&self, conn: &mut PgConnection) -> Result<()> {
+        let already_applied: bool = sqlx::query_scalar(
+            "select exists (
+                select 1 from pg_indexes
+                where schemaname = 'public'
+                and indexname = 's3_object_current_state_unique'
+            )",
+        )
+        .fetch_one(&mut *conn)
+        .await?;
+
+        if already_applied {
+            return Ok(());
+        }
+
+        let (buckets, keys): (Vec<String>, Vec<String>) =
+            sqlx::query_as("select distinct bucket, key from s3_object")
+                .fetch_all(&mut *conn)
+                .await?
+                .into_iter()
+                .unzip();
+
+        let mut tx = conn.begin().await?;
+        Query::new(self.client.clone())
+            .reset_current_state(&mut tx, buckets, keys)
+            .await?;
+        tx.commit().await?;
+
+        Ok(())
+    }
 }
 
 #[async_trait]
 impl Migrate for Migration {
     async fn migrate(&self) -> Result<()> {
         trace!("applying migrations");
+        let mut conn = self.client().pool().acquire().await?;
+        self.fix_current_state(&mut conn).await?;
         Self::migrator()
-            .run(self.client().pool())
+            .run_direct(&mut *conn)
             .await
             .map_err(|err| MigrateError(err.to_string()))
     }

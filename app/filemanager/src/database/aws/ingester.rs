@@ -154,7 +154,6 @@ impl Ingester {
         .bind(&events.archive_statuses)
         .bind(&events.event_types)
         .bind(&events.ingest_ids)
-        .bind(&events.is_current_state)
         .bind(&events.attributes)
         .fetch_all(conn)
         .await?;

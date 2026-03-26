@@ -16,7 +16,6 @@ insert into s3_object (
     archive_status,
     event_type,
     ingest_id,
-    is_current_state,
     attributes
 )
 values (
@@ -36,8 +35,7 @@ values (
     unnest($14::archive_status[]),
     unnest($15::event_type[]),
     unnest($16::uuid[]),
-    unnest($17::boolean[]),
-    unnest($18::jsonb[])
+    unnest($17::jsonb[])
 ) on conflict on constraint sequencer_unique do update
     set number_duplicate_events = s3_object.number_duplicate_events + 1
     returning s3_object_id, number_duplicate_events;

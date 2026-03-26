@@ -404,7 +404,6 @@ pub(crate) mod tests {
         .bind(vec![archive_status])
         .bind(vec![event_type.clone()])
         .bind(vec![UuidGenerator::generate()])
-        .bind(vec![matches!(event_type, Created)])
         .bind(vec![None::<Json>])
         .fetch_all(pool)
         .await

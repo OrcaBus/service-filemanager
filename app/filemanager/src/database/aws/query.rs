@@ -1,11 +1,11 @@
+use crate::database::Client;
+use crate::error::Error::QueryError;
+use crate::error::Result;
+use crate::events::aws::{FlatS3EventMessage, FlatS3EventMessages};
 use itertools::Itertools;
 use sqlx::postgres::PgAdvisoryLock;
 use sqlx::{Acquire, PgConnection, Postgres, Transaction, query, query_as};
 use std::collections::HashSet;
-
-use crate::database::Client;
-use crate::error::Result;
-use crate::events::aws::{FlatS3EventMessage, FlatS3EventMessages};
 
 /// Query the filemanager via REST interface.
 #[derive(Debug)]
@@ -76,9 +76,13 @@ impl Query {
                 let lock = PgAdvisoryLock::new(format!("{bucket}/{key}"))
                     .key()
                     .as_bigint()
-                    .expect("new only creates the bigint variety");
-                (bucket, key, lock)
+                    .ok_or_else(|| {
+                        QueryError("expected `PgAdvisoryLock` to create bigint".to_string())
+                    })?;
+                Ok((bucket, key, lock))
             })
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
             .sorted()
             .multiunzip();
 

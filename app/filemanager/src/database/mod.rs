@@ -404,9 +404,17 @@ pub(crate) mod tests {
         .bind(vec![archive_status])
         .bind(vec![event_type.clone()])
         .bind(vec![UuidGenerator::generate()])
-        .bind(vec![matches!(event_type, Created)])
         .bind(vec![None::<Json>])
         .fetch_all(pool)
+        .await
+        .unwrap();
+
+        query(include_str!(
+            "../../../database/queries/api/reset_current_state.sql"
+        ))
+        .bind(vec!["bucket".to_string()])
+        .bind(vec!["key".to_string()])
+        .execute(pool)
         .await
         .unwrap();
     }

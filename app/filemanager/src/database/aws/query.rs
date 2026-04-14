@@ -1,9 +1,11 @@
-use sqlx::{Acquire, PgConnection, Postgres, Transaction, query, query_as};
-use std::collections::HashSet;
-
 use crate::database::Client;
+use crate::error::Error::QueryError;
 use crate::error::Result;
 use crate::events::aws::{FlatS3EventMessage, FlatS3EventMessages};
+use itertools::Itertools;
+use sqlx::postgres::PgAdvisoryLock;
+use sqlx::{Acquire, PgConnection, Postgres, Transaction, query, query_as};
+use std::collections::HashSet;
 
 /// Query the filemanager via REST interface.
 #[derive(Debug)]
@@ -64,11 +66,31 @@ impl Query {
         keys: Vec<String>,
     ) -> Result<()> {
         // Remove duplicate combinations of (bucket, key) as it's unnecessary to call multiple times.
-        let bucket_key_pairs: HashSet<_> =
-            HashSet::from_iter(buckets.into_iter().zip(keys.into_iter()));
-        let (buckets, keys): (Vec<_>, Vec<_>) = bucket_key_pairs.into_iter().unzip();
+        // Also sort to ensure locking is consistent.
+        let (buckets, keys, locks): (Vec<_>, Vec<_>, Vec<_>) = buckets
+            .into_iter()
+            .zip(keys)
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .map(|(bucket, key)| {
+                let lock = PgAdvisoryLock::new(format!("{bucket}/{key}"))
+                    .key()
+                    .as_bigint()
+                    .ok_or_else(|| {
+                        QueryError("expected `PgAdvisoryLock` to create bigint".to_string())
+                    })?;
+                Ok((bucket, key, lock))
+            })
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .sorted()
+            .multiunzip();
 
         let conn = conn.acquire().await?;
+        query("select pg_advisory_xact_lock(lock_id) from unnest($1::bigint[]) as lock_values (lock_id)")
+            .bind(&locks)
+            .execute(&mut *conn)
+            .await?;
 
         query(include_str!(
             "../../../../database/queries/api/reset_current_state.sql"
@@ -129,13 +151,48 @@ mod tests {
         Ingester::ingest_query(&events, &mut pool.acquire().await.unwrap())
             .await
             .unwrap();
+        Query::new(Client::from_pool(pool.clone()))
+            .reset_current_state(
+                &mut pool.acquire().await.unwrap(),
+                events.buckets,
+                events.keys,
+            )
+            .await
+            .unwrap();
+
         Ingester::ingest_query(&increase_date, &mut pool.acquire().await.unwrap())
             .await
             .unwrap();
+        Query::new(Client::from_pool(pool.clone()))
+            .reset_current_state(
+                &mut pool.acquire().await.unwrap(),
+                increase_date.buckets,
+                increase_date.keys,
+            )
+            .await
+            .unwrap();
+
         Ingester::ingest_query(&different_key, &mut pool.acquire().await.unwrap())
             .await
             .unwrap();
+        Query::new(Client::from_pool(pool.clone()))
+            .reset_current_state(
+                &mut pool.acquire().await.unwrap(),
+                different_key.buckets,
+                different_key.keys,
+            )
+            .await
+            .unwrap();
+
         Ingester::ingest_query(&different_key_and_date, &mut pool.acquire().await.unwrap())
+            .await
+            .unwrap();
+        Query::new(Client::from_pool(pool.clone()))
+            .reset_current_state(
+                &mut pool.acquire().await.unwrap(),
+                different_key_and_date.buckets,
+                different_key_and_date.keys,
+            )
             .await
             .unwrap();
 

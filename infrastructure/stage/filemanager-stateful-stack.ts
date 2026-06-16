@@ -1,5 +1,5 @@
 import { Construct } from 'constructs';
-import { Duration, RemovalPolicy, Stack, StackProps } from 'aws-cdk-lib';
+import { Duration, RemovalPolicy, StackProps } from 'aws-cdk-lib';
 import { AccessKeySecret, AccessKeySecretProps } from '../components/access-key-secret';
 import { Rule } from 'aws-cdk-lib/aws-events';
 import { ServicePrincipal } from 'aws-cdk-lib/aws-iam';
@@ -7,6 +7,7 @@ import { SqsQueue } from 'aws-cdk-lib/aws-events-targets';
 import { FILEMANAGER_INGEST_QUEUE } from './constants';
 import { MonitoredQueue } from '@orcabus/platform-cdk-constructs/monitored-queue';
 import { SlackAlerts } from '@orcabus/platform-cdk-constructs/shared-config/slack';
+import { GitStack } from '@orcabus/platform-cdk-constructs/deployment-stack-pipeline';
 
 /**
  * Stateful config for filemanager.
@@ -52,7 +53,7 @@ export type FileManagerStatefulProps = StackProps & FileManagerStatefulConfig;
 /**
  * Construct used to configure stateful resources for the filemanager.
  */
-export class FileManagerStatefulStack extends Stack {
+export class FileManagerStatefulStack extends GitStack {
   readonly accessKeySecret: AccessKeySecret;
   readonly monitoredQueue: MonitoredQueue;
 

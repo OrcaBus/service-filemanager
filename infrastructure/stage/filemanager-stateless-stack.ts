@@ -4,7 +4,7 @@ import { MigrateFunction } from './functions/migrate';
 import { ApiFunction } from './functions/api';
 import { DatabaseProps } from './functions/function';
 import { Vpc, SecurityGroup, VpcLookupOptions, IVpc, ISecurityGroup } from 'aws-cdk-lib/aws-ec2';
-import { Arn, Duration, Stack, StackProps } from 'aws-cdk-lib';
+import { Arn, Duration, StackProps } from 'aws-cdk-lib';
 import { StringParameter } from 'aws-cdk-lib/aws-ssm';
 import { IQueue, Queue } from 'aws-cdk-lib/aws-sqs';
 import {
@@ -24,6 +24,7 @@ import {
 import { ProviderFunction } from '@orcabus/platform-cdk-constructs/provider-function';
 import { NamedLambdaRole } from '@orcabus/platform-cdk-constructs/named-lambda-role';
 import { SlackAlerts } from '@orcabus/platform-cdk-constructs/shared-config/slack';
+import { GitStack } from '@orcabus/platform-cdk-constructs/deployment-stack-pipeline';
 
 /**
  * Stateful config for filemanager.
@@ -50,7 +51,7 @@ export type FileManagerStatelessProps = StackProps & FileManagerStatelessConfig;
 /**
  * Construct used to configure the filemanager.
  */
-export class FileManagerStack extends Stack {
+export class FileManagerStack extends GitStack {
   private readonly vpc: IVpc;
   private readonly host: string;
   private readonly securityGroup: ISecurityGroup;

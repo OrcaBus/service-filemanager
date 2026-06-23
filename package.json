@@ -20,13 +20,13 @@
     "organization": true
   },
   "license": "MIT",
-  "packageManager": "pnpm@11.7.0+sha512.19cc852c120c7125760f2443ee6be0ca5b40f9f50598de1a09a1f177503e010e57c23c77646e01e761de59bf874fb22a3398c33ab9691fc13eb946b6f0f4d620",
+  "packageManager": "pnpm@11.8.0+sha512.c1f5e7c4cb241c8f174b743851d82f42b802324afc8b0f116b96adb15aa06664948dde36960a3ba1079ba5b4b29dd0140135b94b5b5f5263592249d68e555f26",
   "devDependencies": {
-    "@aws-sdk/client-eventbridge": "^3.1069.0",
+    "@aws-sdk/client-eventbridge": "^3.1073.0",
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.13.2",
-    "aws-cdk": "^2.1127.0",
+    "aws-cdk": "^2.1128.0",
     "cdk-nag": "^2.38.2",
     "eslint": "^10.5.0",
     "globals": "^17.6.0",
@@ -39,8 +39,8 @@
     "typescript-eslint": "^8.61.1"
   },
   "dependencies": {
-    "@orcabus/platform-cdk-constructs": "1.7.1",
-    "aws-cdk-lib": "^2.259.0",
+    "@orcabus/platform-cdk-constructs": "1.7.2",
+    "aws-cdk-lib": "^2.260.0",
     "cargo-lambda-cdk": "^0.0.36",
     "constructs": "^10.6.0"
   }

@@ -29,6 +29,7 @@ minimumReleaseAgeExclude:
   - aws-cdk@2.1127.0
   - typescript-eslint@8.61.1
   - js-yaml@4.1.2
+  - '@orcabus/platform-cdk-constructs@1.7.2'
 overrides:
   brace-expansion@<1.1.13: '>=1.1.13'
   brace-expansion@>=2.0.0 <2.0.3: '>=2.0.3'

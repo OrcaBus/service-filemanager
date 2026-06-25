@@ -46,7 +46,7 @@ export class IngestFunction extends Function {
   constructor(scope: Construct, id: string, props: IngestFunctionProps) {
     super(scope, id, {
       package: 'filemanager-ingest-lambda',
-      timeout: Duration.minutes(15),
+      timeout: Duration.minutes(5),
       environment: {
         FILEMANAGER_INGESTER_TAG_NAME: FILEMANAGER_INGEST_ID_TAG_NAME,
         ...props.environment,

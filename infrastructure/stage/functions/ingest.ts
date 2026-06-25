@@ -62,7 +62,7 @@ export class IngestFunction extends Function {
       // aggresively.
       const eventSource = new SqsEventSource(source, {
         batchSize: 10000,
-        maxBatchingWindow: Duration.seconds(5),
+        maxBatchingWindow: Duration.seconds(30),
         maxConcurrency: 10,
       });
       this.function.addEventSource(eventSource);

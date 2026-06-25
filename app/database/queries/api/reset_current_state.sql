@@ -62,4 +62,5 @@ update s3_object
 set is_current_state = current_state_ordered.is_current_state
 from current_state_ordered
 where s3_object.s3_object_id = current_state_ordered.s3_object_id
+    and s3_object.is_current_state is distinct from current_state_ordered.is_current_state
 returning s3_object.s3_object_id, s3_object.is_current_state;

@@ -4,7 +4,7 @@
 use async_trait::async_trait;
 use sea_orm::{DatabaseConnection, SqlxPostgresConnector};
 use sqlx::PgPool;
-use sqlx::postgres::PgConnectOptions;
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use tracing::debug;
 
 use crate::database::aws::credentials::IamGenerator;
@@ -64,7 +64,12 @@ impl Client {
         generator: Option<impl CredentialGenerator>,
         config: &Config,
     ) -> Result<PgPool> {
-        Ok(PgPool::connect_with(Self::pg_connect_options(generator, config).await?).await?)
+        // Reduce connections per Lambda, there shouldn't be any need to more than 2 connections,
+        // as a batch is processed with an insert and resetting the current state.
+        Ok(PgPoolOptions::new()
+            .max_connections(2)
+            .connect_with(Self::pg_connect_options(generator, config).await?)
+            .await?)
     }
 
     /// Create database connect options using a series of credential loading logic.

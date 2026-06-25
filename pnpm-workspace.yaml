@@ -1,36 +1,7 @@
 allowBuilds:
   unrs-resolver: true
 minimumReleaseAgeExclude:
-  - '@aws-sdk/client-eventbridge@3.1069.0'
-  - '@aws-sdk/core@3.974.21'
-  - '@aws-sdk/credential-provider-env@3.972.47'
-  - '@aws-sdk/credential-provider-http@3.972.49'
-  - '@aws-sdk/credential-provider-ini@3.972.54'
-  - '@aws-sdk/credential-provider-login@3.972.53'
-  - '@aws-sdk/credential-provider-node@3.972.56'
-  - '@aws-sdk/credential-provider-process@3.972.47'
-  - '@aws-sdk/credential-provider-sso@3.972.53'
-  - '@aws-sdk/credential-provider-web-identity@3.972.53'
-  - '@aws-sdk/nested-clients@3.997.21'
-  - '@aws-sdk/signature-v4-multi-region@3.996.35'
-  - '@aws-sdk/token-providers@3.1069.0'
-  - '@aws-sdk/types@3.973.13'
-  - '@aws-sdk/xml-builder@3.972.30'
-  - '@typescript-eslint/eslint-plugin@8.61.1'
-  - '@typescript-eslint/parser@8.61.1'
-  - '@typescript-eslint/project-service@8.61.1'
-  - '@typescript-eslint/scope-manager@8.61.1'
-  - '@typescript-eslint/tsconfig-utils@8.61.1'
-  - '@typescript-eslint/type-utils@8.61.1'
-  - '@typescript-eslint/types@8.61.1'
-  - '@typescript-eslint/typescript-estree@8.61.1'
-  - '@typescript-eslint/utils@8.61.1'
-  - '@typescript-eslint/visitor-keys@8.61.1'
-  - aws-cdk@2.1127.0
-  - typescript-eslint@8.61.1
+  - '@orcabus/platform-cdk-constructs'
   - js-yaml@4.1.2
-  - '@orcabus/platform-cdk-constructs@1.7.2'
 overrides:
-  brace-expansion@<1.1.13: '>=1.1.13'
-  brace-expansion@>=2.0.0 <2.0.3: '>=2.0.3'
   js-yaml@<=4.1.1: ^4.1.2

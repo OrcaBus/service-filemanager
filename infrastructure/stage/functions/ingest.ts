@@ -57,7 +57,14 @@ export class IngestFunction extends Function {
     this.addAwsManagedPolicy('service-role/AWSLambdaSQSQueueExecutionRole');
 
     props.ingestQueues.forEach((source) => {
-      const eventSource = new SqsEventSource(source);
+      // Reduce the ingestion speed to reduce ACU usage on the shared cluster. There's no
+      // need to have more than 10 Lambdas running concurrently, and the SQS should batch more
+      // aggresively.
+      const eventSource = new SqsEventSource(source, {
+        batchSize: 10000,
+        maxBatchingWindow: Duration.seconds(30),
+        maxConcurrency: 10,
+      });
       this.function.addEventSource(eventSource);
     });
     this.addPoliciesForBuckets(props.buckets, [

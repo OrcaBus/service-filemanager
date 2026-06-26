@@ -68,6 +68,7 @@ export class FileManagerStatefulStack extends GitStack {
         queueName: FILEMANAGER_INGEST_QUEUE,
         removalPolicy: RemovalPolicy.RETAIN,
         alarmOldestMessageSeconds: alarmOldestMessage,
+        visibilityTimeout: Duration.minutes(5),
       },
       dlqProps: {
         queueName: `${FILEMANAGER_INGEST_QUEUE}-dlq`,

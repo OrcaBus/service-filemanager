@@ -26,6 +26,7 @@
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.13.2",
+    "@types/source-map-support": "^0.5.10",
     "aws-cdk": "^2.1128.1",
     "cdk-nag": "^2.38.2",
     "eslint": "^10.5.0",

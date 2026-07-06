@@ -20,6 +20,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::from_slice;
 use serde_with::{DisplayFromStr, serde_as};
 use std::io::{BufReader, Cursor, Read};
+use std::num::NonZeroUsize;
 use std::result;
 
 use crate::clients::aws::s3::Client;
@@ -38,7 +39,7 @@ const DEFAULT_CSV_MANIFEST: &str =
 #[derive(Debug)]
 pub struct Inventory {
     client: Client,
-    concurrency: usize,
+    concurrency: NonZeroUsize,
 }
 
 impl Inventory {
@@ -51,7 +52,7 @@ impl Inventory {
     }
 
     /// Set the maximum number of manifest files fetched concurrently.
-    pub fn with_concurrency(mut self, concurrency: usize) -> Self {
+    pub fn with_concurrency(mut self, concurrency: NonZeroUsize) -> Self {
         self.concurrency = concurrency;
         self
     }
@@ -261,10 +262,7 @@ impl Inventory {
         };
 
         // TODO: consider streaming a file and reading records without placing them into memory first.
-        let concurrency = match self.concurrency {
-            0 => usize::MAX,
-            n => n,
-        };
+        let concurrency = self.concurrency.get();
         let inventories = stream::iter(manifest.files.iter().map(|file| async {
             let body = self.get_object_bytes(&file.key, &bucket).await?;
 

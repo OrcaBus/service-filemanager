@@ -65,7 +65,7 @@ impl Client {
         config: &Config,
     ) -> Result<PgPool> {
         Ok(PgPoolOptions::new()
-            .max_connections(config.database_max_connections())
+            .max_connections(config.database_max_connections().get())
             .connect_with(Self::pg_connect_options(generator, config).await?)
             .await?)
     }

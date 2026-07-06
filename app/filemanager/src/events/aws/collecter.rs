@@ -534,10 +534,7 @@ impl<'a> Collecter<'a> {
         crawl_bucket: Option<String>,
         crawl_prefix: Option<String>,
     ) -> Result<FlatS3EventMessages> {
-        let concurrency = match config.crawl_concurrency() {
-            0 => usize::MAX,
-            n => n,
-        };
+        let concurrency = config.crawl_concurrency().get();
 
         // Fetch the S3 head and tagging for each object concurrently.
         let events = stream::iter(events.into_inner())

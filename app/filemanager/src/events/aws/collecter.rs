@@ -560,7 +560,10 @@ impl<'a> Collecter<'a> {
         // Look up the attributes of all moved objects in a single query.
         let attributes = Self::moved_object_attributes(
             database_client,
-            events.iter().filter_map(|(_, ingest_id)| *ingest_id).collect(),
+            events
+                .iter()
+                .filter_map(|(_, ingest_id)| *ingest_id)
+                .collect(),
         )
         .await?;
 
@@ -934,6 +937,166 @@ pub(crate) mod tests {
             s3_object_results[1].get::<Option<Json>, _>("attributes"),
             Some(expected_attributes)
         );
+    }
+
+    #[sqlx::test(migrator = "MIGRATOR")]
+    async fn tagging_with_move_distinct_ingest_ids(pool: PgPool) {
+        let config = Default::default();
+        let client = Client::from_pool(pool.clone());
+        let mut collecter = test_collecter(&config, &client).await;
+
+        let entries = EntriesBuilder::default()
+            .with_n(3)
+            .build(&client)
+            .await
+            .unwrap();
+        let ingest_id_0 = entries.s3_objects[0].ingest_id.unwrap();
+        let attributes_0 = entries.s3_objects[0].attributes.clone();
+        let ingest_id_2 = entries.s3_objects[2].ingest_id.unwrap();
+        let attributes_2 = entries.s3_objects[2].attributes.clone();
+        assert_ne!(ingest_id_0, ingest_id_2);
+        assert_ne!(attributes_0, attributes_2);
+
+        // Two incoming moved objects, each tagged with a different ingest id.
+        collecter.raw_events = FlatS3EventMessages(vec![
+            expected_s3_event_message().with_version_id(default_version_id()),
+            expected_s3_event_message()
+                .with_key("key1".to_string())
+                .with_version_id(default_version_id()),
+        ]);
+        collecter.client = mock_s3(&[
+            head_expectation(
+                "key".to_string(),
+                default_version_id(),
+                expected_head_object(),
+            ),
+            head_expectation(
+                "key1".to_string(),
+                default_version_id(),
+                expected_head_object(),
+            ),
+            get_tagging_expectation(
+                "key".to_string(),
+                default_version_id(),
+                expected_get_object_tagging(Some(ingest_id_0)),
+            ),
+            get_tagging_expectation(
+                "key1".to_string(),
+                default_version_id(),
+                expected_get_object_tagging(Some(ingest_id_2)),
+            ),
+        ]);
+
+        let result = collecter.collect().await.unwrap();
+        let EventSourceType::S3(events) = &result.event_type else {
+            panic!();
+        };
+
+        let by_key: HashMap<String, (Option<Uuid>, Option<Json>)> = events
+            .keys
+            .iter()
+            .cloned()
+            .zip(
+                events
+                    .ingest_ids
+                    .iter()
+                    .cloned()
+                    .zip(events.attributes.iter().cloned()),
+            )
+            .collect();
+
+        assert_eq!(by_key["key"], (Some(ingest_id_0), attributes_0));
+        assert_eq!(by_key["key1"], (Some(ingest_id_2), attributes_2));
+    }
+
+    #[sqlx::test(migrator = "MIGRATOR")]
+    async fn tagging_with_move_not_in_database(pool: PgPool) {
+        let config = Default::default();
+        let client = Client::from_pool(pool.clone());
+        let mut collecter = test_collecter(&config, &client).await;
+
+        // A valid ingest_id tag that does not correspond to any database record.
+        let ingest_id = UuidGenerator::generate();
+
+        collecter.raw_events = FlatS3EventMessages(vec![
+            expected_s3_event_message().with_version_id(default_version_id()),
+        ]);
+        collecter.client = mock_s3(&[
+            head_expectation(
+                "key".to_string(),
+                default_version_id(),
+                expected_head_object(),
+            ),
+            get_tagging_expectation(
+                "key".to_string(),
+                default_version_id(),
+                expected_get_object_tagging(Some(ingest_id)),
+            ),
+        ]);
+
+        let result = collecter.collect().await.unwrap();
+        let EventSourceType::S3(events) = &result.event_type else {
+            panic!();
+        };
+
+        // The ingest_id from the tag is still applied, but since there is no matching database.
+        assert_eq!(events.ingest_ids[0], Some(ingest_id));
+        assert_eq!(events.attributes[0], None);
+    }
+
+    #[sqlx::test(migrator = "MIGRATOR")]
+    async fn tagging_with_move_shared_ingest_id(pool: PgPool) {
+        let config = Default::default();
+        let client = Client::from_pool(pool.clone());
+        let mut collecter = test_collecter(&config, &client).await;
+
+        // A single database record whose ingest_id is shared by two objects.
+        let ingest_id = UuidGenerator::generate();
+        let entries = EntriesBuilder::default()
+            .with_ingest_id(ingest_id)
+            .with_n(1)
+            .build(&client)
+            .await
+            .unwrap();
+        let attributes = entries.s3_objects[0].attributes.clone();
+
+        collecter.raw_events = FlatS3EventMessages(vec![
+            expected_s3_event_message().with_version_id(default_version_id()),
+            expected_s3_event_message()
+                .with_key("key1".to_string())
+                .with_version_id(default_version_id()),
+        ]);
+        collecter.client = mock_s3(&[
+            head_expectation(
+                "key".to_string(),
+                default_version_id(),
+                expected_head_object(),
+            ),
+            head_expectation(
+                "key1".to_string(),
+                default_version_id(),
+                expected_head_object(),
+            ),
+            get_tagging_expectation(
+                "key".to_string(),
+                default_version_id(),
+                expected_get_object_tagging(Some(ingest_id)),
+            ),
+            get_tagging_expectation(
+                "key1".to_string(),
+                default_version_id(),
+                expected_get_object_tagging(Some(ingest_id)),
+            ),
+        ]);
+
+        let result = collecter.collect().await.unwrap();
+        let EventSourceType::S3(events) = &result.event_type else {
+            panic!();
+        };
+
+        // Both incoming objects share the same ingest_id.
+        assert_eq!(events.ingest_ids, vec![Some(ingest_id), Some(ingest_id)]);
+        assert_eq!(events.attributes, vec![attributes.clone(), attributes]);
     }
 
     #[sqlx::test(migrator = "MIGRATOR")]

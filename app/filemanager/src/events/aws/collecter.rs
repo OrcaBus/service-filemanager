@@ -30,7 +30,8 @@ use chrono::{DateTime, Utc};
 use futures::TryFutureExt;
 use futures::stream::{self, StreamExt, TryStreamExt};
 use itertools::Itertools;
-use std::collections::HashSet;
+use sea_orm::prelude::Json;
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use tracing::{trace, warn};
 use uuid::Uuid;
@@ -304,13 +305,13 @@ impl<'a> Collecter<'a> {
             .update_archive_status(archive_status.and_then(ArchiveStatus::from_aws))
     }
 
-    /// Gets S3 tags from objects.
+    /// Gets S3 tags from objects, generating and applying a new `ingest_id` tag if one is not
+    /// already present. Returns the updated event along with the `ingest_id` of a moved object.
     pub async fn tagging(
         config: &Config,
         client: &S3Client,
-        database_client: &database::Client,
         event: FlatS3EventMessage,
-    ) -> Result<FlatS3EventMessage> {
+    ) -> Result<(FlatS3EventMessage, Option<Uuid>)> {
         let tagging = client
             .get_object_tagging(&event.key, &event.bucket, &event.version_id)
             .inspect_err(|err| {
@@ -325,7 +326,7 @@ impl<'a> Collecter<'a> {
             .ok();
 
         let Some(tagging) = tagging else {
-            return Ok(event);
+            return Ok((event, None));
         };
 
         trace!(tagging = ?tagging, "received tagging output");
@@ -365,11 +366,12 @@ impl<'a> Collecter<'a> {
                     )
                 });
 
-            // Only add a ingest_id to the new record if the tagging was successful.
+            // Only add a ingest_id to the new record if the tagging was successful. New objects do
+            // not have an existing database record, so no attributes need to be looked up.
             return if result.is_ok() {
-                Ok(event.with_ingest_id(Some(ingest_id)))
+                Ok((event.with_ingest_id(Some(ingest_id)), None))
             } else {
-                Ok(event)
+                Ok((event, None))
             };
         };
 
@@ -382,36 +384,12 @@ impl<'a> Collecter<'a> {
             );
         });
         let Ok(ingest_id) = ingest_id else {
-            return Ok(event);
+            return Ok((event, None));
         };
 
-        // From here, the new record must be a valid, moved object.
-        let event = event.with_ingest_id(Some(ingest_id));
-
-        // Get the attributes from the old record to update the new record with.
-        let filter = S3ObjectsFilter {
-            ingest_id: vec![ingest_id].into(),
-            ..Default::default()
-        };
-        let moved_object =
-            ListQueryBuilder::<_, s3_object::Entity>::new(database_client.connection_ref())
-                .filter_all(filter, true, false)?
-                .one()
-                .await
-                .ok()
-                .flatten();
-
-        // Update the new record with the attributes if possible, or return the new record without
-        // the attributes if not possible.
-        if let Some(moved_object) = moved_object {
-            Ok(event.with_attributes(moved_object.attributes))
-        } else {
-            warn!(
-                "Ingester Warning for {} in {}: Object with ingest_id {} not found in database",
-                event.key, event.bucket, ingest_id
-            );
-            Ok(event)
-        }
+        // From here, the new record must be a valid, moved object. Its attributes are carried over
+        // from the existing record, which is looked up in a single batched query.
+        Ok((event.with_ingest_id(Some(ingest_id)), Some(ingest_id)))
     }
 
     /// Updates events that are crawls to take into account the existing database state.
@@ -560,23 +538,53 @@ impl<'a> Collecter<'a> {
             0 => usize::MAX,
             n => n,
         };
+
+        // Fetch the S3 head and tagging for each object concurrently.
+        let events = stream::iter(events.into_inner())
+            .map(|event| async move {
+                // No need to run this unnecessarily on removed events.
+                match event.event_type {
+                    EventType::Deleted | EventType::Other => return Ok((event, None)),
+                    _ => {}
+                };
+
+                trace!(key = ?event.key, bucket = ?event.bucket, "updating event");
+
+                let event = Self::head(client, event).await;
+                Self::tagging(config, client, event).await
+            })
+            .buffered(concurrency)
+            .try_collect::<Vec<(FlatS3EventMessage, Option<Uuid>)>>()
+            .await?;
+
+        // Look up the attributes of all moved objects in a single query.
+        let attributes = Self::moved_object_attributes(
+            database_client,
+            events.iter().filter_map(|(_, ingest_id)| *ingest_id).collect(),
+        )
+        .await?;
+
+        // Carry the looked-up attributes over to each moved object in memory.
         let events = FlatS3EventMessages(
-            stream::iter(events.into_inner())
-                .map(|event| async move {
-                    // No need to run this unnecessarily on removed events.
-                    match event.event_type {
-                        EventType::Deleted | EventType::Other => return Ok(event),
-                        _ => {}
+            events
+                .into_iter()
+                .map(|(event, ingest_id)| {
+                    let Some(ingest_id) = ingest_id else {
+                        return event;
                     };
 
-                    trace!(key = ?event.key, bucket = ?event.bucket, "updating event");
-
-                    let event = Self::head(client, event).await;
-                    Self::tagging(config, client, database_client, event).await
+                    match attributes.get(&ingest_id) {
+                        Some(attributes) => event.with_attributes(attributes.clone()),
+                        None => {
+                            warn!(
+                                "Ingester Warning for {} in {}: Object with ingest_id {} not found in database",
+                                event.key, event.bucket, ingest_id
+                            );
+                            event
+                        }
+                    }
                 })
-                .buffered(concurrency)
-                .try_collect::<Vec<FlatS3EventMessage>>()
-                .await?,
+                .collect(),
         );
 
         if let Some(crawl_bucket) = crawl_bucket {
@@ -584,6 +592,37 @@ impl<'a> Collecter<'a> {
         } else {
             Ok(events)
         }
+    }
+
+    /// Look up the attributes of moved objects from the database in a single batched query.
+    async fn moved_object_attributes(
+        database_client: &database::Client,
+        ingest_ids: Vec<Uuid>,
+    ) -> Result<HashMap<Uuid, Option<Json>>> {
+        if ingest_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        // Deduplicate so the query does not contain redundant conditions.
+        let ingest_ids = ingest_ids.into_iter().collect::<HashSet<_>>();
+        let filter = S3ObjectsFilter {
+            ingest_id: ingest_ids.into_iter().collect_vec().into(),
+            ..Default::default()
+        };
+        let moved_objects =
+            ListQueryBuilder::<_, s3_object::Entity>::new(database_client.connection_ref())
+                .filter_all(filter, true, false)?
+                .all()
+                .await?;
+
+        let mut attributes = HashMap::with_capacity(moved_objects.len());
+        for object in moved_objects {
+            if let Some(ingest_id) = object.ingest_id {
+                attributes.entry(ingest_id).or_insert(object.attributes);
+            }
+        }
+
+        Ok(attributes)
     }
 
     /// Get the number of records processed.

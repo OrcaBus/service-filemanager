@@ -28,7 +28,7 @@ use aws_sdk_s3::types::StorageClass::Standard;
 use aws_sdk_s3::types::{Tag, Tagging};
 use chrono::{DateTime, Utc};
 use futures::TryFutureExt;
-use futures::future::join_all;
+use futures::stream::{self, StreamExt, TryStreamExt};
 use itertools::Itertools;
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -556,22 +556,27 @@ impl<'a> Collecter<'a> {
         crawl_bucket: Option<String>,
         crawl_prefix: Option<String>,
     ) -> Result<FlatS3EventMessages> {
+        let concurrency = match config.crawl_concurrency() {
+            0 => usize::MAX,
+            n => n,
+        };
         let events = FlatS3EventMessages(
-            join_all(events.into_inner().into_iter().map(|event| async move {
-                // No need to run this unnecessarily on removed events.
-                match event.event_type {
-                    EventType::Deleted | EventType::Other => return Ok(event),
-                    _ => {}
-                };
+            stream::iter(events.into_inner())
+                .map(|event| async move {
+                    // No need to run this unnecessarily on removed events.
+                    match event.event_type {
+                        EventType::Deleted | EventType::Other => return Ok(event),
+                        _ => {}
+                    };
 
-                trace!(key = ?event.key, bucket = ?event.bucket, "updating event");
+                    trace!(key = ?event.key, bucket = ?event.bucket, "updating event");
 
-                let event = Self::head(client, event).await;
-                Self::tagging(config, client, database_client, event).await
-            }))
-            .await
-            .into_iter()
-            .collect::<Result<Vec<FlatS3EventMessage>>>()?,
+                    let event = Self::head(client, event).await;
+                    Self::tagging(config, client, database_client, event).await
+                })
+                .buffered(concurrency)
+                .try_collect::<Vec<FlatS3EventMessage>>()
+                .await?,
         );
 
         if let Some(crawl_bucket) = crawl_bucket {

@@ -28,6 +28,7 @@ export class ApiFunction extends fn.Function {
         AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH: 'true',
         FILEMANAGER_ACCESS_KEY_SECRET_ID: props.accessKeySecretArn,
         FILEMANAGER_INGESTER_TAG_NAME: FILEMANAGER_INGEST_ID_TAG_NAME,
+        FILEMANAGER_DATABASE_MAX_CONNECTIONS: '5',
         ...props.environment,
       },
       ...props,

@@ -55,6 +55,8 @@ pub struct Config {
     pub(crate) access_key_secret_id: Option<String>,
     #[serde(rename = "filemanager_crawl_concurrency")]
     pub(crate) crawl_concurrency: usize,
+    #[serde(rename = "filemanager_database_max_connections")]
+    pub(crate) database_max_connections: u32,
 }
 
 /// Default presigned URL expiry time, 7 days.
@@ -62,6 +64,9 @@ pub const DEFAULT_PRESIGN_EXPIRY: Duration = Duration::days(7);
 
 /// Default maximum number of objects processed concurrently.
 pub const DEFAULT_CRAWL_CONCURRENCY: usize = 50;
+
+/// Default maximum number of database connections per Lambda execution environment.
+pub const DEFAULT_DATABASE_MAX_CONNECTIONS: u32 = 2;
 
 fn parse_limit<'de, D>(deserializer: D) -> result::Result<Option<u64>, D::Error>
 where
@@ -109,6 +114,7 @@ impl Default for Config {
             api_cors_allow_headers: vec![AUTHORIZATION.to_string()],
             access_key_secret_id: None,
             crawl_concurrency: DEFAULT_CRAWL_CONCURRENCY,
+            database_max_connections: DEFAULT_DATABASE_MAX_CONNECTIONS,
         }
     }
 }
@@ -215,6 +221,11 @@ impl Config {
         self.crawl_concurrency
     }
 
+    /// Get the maximum number of database connections per Lambda execution environment.
+    pub fn database_max_connections(&self) -> u32 {
+        self.database_max_connections
+    }
+
     /// Get the value from an optional, or else try and get a different value, unwrapping into a Result.
     pub fn value_or_else<T>(value: Option<T>, or_else: Option<T>) -> Result<T> {
         value
@@ -257,6 +268,7 @@ mod tests {
             ("FILEMANAGER_API_CORS_ALLOW_HEADERS", "Authorization,Accept"),
             ("FILEMANAGER_ACCESS_KEY_SECRET_ID", "id"),
             ("FILEMANAGER_CRAWL_CONCURRENCY", "100"),
+            ("FILEMANAGER_DATABASE_MAX_CONNECTIONS", "10"),
         ]
         .into_iter()
         .map(|(key, value)| (key.to_string(), value.to_string()));
@@ -286,6 +298,7 @@ mod tests {
                 api_cors_allow_headers: vec!["Authorization".to_string(), "Accept".to_string()],
                 access_key_secret_id: Some("id".to_string()),
                 crawl_concurrency: 100,
+                database_max_connections: 10,
             }
         )
     }

@@ -99,7 +99,7 @@ pub async fn ingest_s3_inventory(
         ));
     }
 
-    let inventory = Inventory::new(s3_client);
+    let inventory = Inventory::new(s3_client).with_concurrency(env_config.crawl_concurrency());
 
     let records = if let Some(manifest) = manifest {
         inventory.parse_manifest(manifest).await?

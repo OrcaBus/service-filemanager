@@ -64,10 +64,8 @@ impl Client {
         generator: Option<impl CredentialGenerator>,
         config: &Config,
     ) -> Result<PgPool> {
-        // Reduce connections per Lambda, there shouldn't be any need to more than 2 connections,
-        // as a batch is processed with an insert and resetting the current state.
         Ok(PgPoolOptions::new()
-            .max_connections(2)
+            .max_connections(config.database_max_connections().get())
             .connect_with(Self::pg_connect_options(generator, config).await?)
             .await?)
     }

@@ -28,9 +28,10 @@ use aws_sdk_s3::types::StorageClass::Standard;
 use aws_sdk_s3::types::{Tag, Tagging};
 use chrono::{DateTime, Utc};
 use futures::TryFutureExt;
-use futures::future::join_all;
+use futures::stream::{self, StreamExt, TryStreamExt};
 use itertools::Itertools;
-use std::collections::HashSet;
+use sea_orm::prelude::Json;
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use tracing::{trace, warn};
 use uuid::Uuid;
@@ -304,13 +305,13 @@ impl<'a> Collecter<'a> {
             .update_archive_status(archive_status.and_then(ArchiveStatus::from_aws))
     }
 
-    /// Gets S3 tags from objects.
+    /// Gets S3 tags from objects, generating and applying a new `ingest_id` tag if one is not
+    /// already present. Returns the updated event along with the `ingest_id` of a moved object.
     pub async fn tagging(
         config: &Config,
         client: &S3Client,
-        database_client: &database::Client,
         event: FlatS3EventMessage,
-    ) -> Result<FlatS3EventMessage> {
+    ) -> Result<(FlatS3EventMessage, Option<Uuid>)> {
         let tagging = client
             .get_object_tagging(&event.key, &event.bucket, &event.version_id)
             .inspect_err(|err| {
@@ -325,7 +326,7 @@ impl<'a> Collecter<'a> {
             .ok();
 
         let Some(tagging) = tagging else {
-            return Ok(event);
+            return Ok((event, None));
         };
 
         trace!(tagging = ?tagging, "received tagging output");
@@ -365,11 +366,12 @@ impl<'a> Collecter<'a> {
                     )
                 });
 
-            // Only add a ingest_id to the new record if the tagging was successful.
+            // Only add a ingest_id to the new record if the tagging was successful. New objects do
+            // not have an existing database record, so no attributes need to be looked up.
             return if result.is_ok() {
-                Ok(event.with_ingest_id(Some(ingest_id)))
+                Ok((event.with_ingest_id(Some(ingest_id)), None))
             } else {
-                Ok(event)
+                Ok((event, None))
             };
         };
 
@@ -382,36 +384,12 @@ impl<'a> Collecter<'a> {
             );
         });
         let Ok(ingest_id) = ingest_id else {
-            return Ok(event);
+            return Ok((event, None));
         };
 
-        // From here, the new record must be a valid, moved object.
-        let event = event.with_ingest_id(Some(ingest_id));
-
-        // Get the attributes from the old record to update the new record with.
-        let filter = S3ObjectsFilter {
-            ingest_id: vec![ingest_id].into(),
-            ..Default::default()
-        };
-        let moved_object =
-            ListQueryBuilder::<_, s3_object::Entity>::new(database_client.connection_ref())
-                .filter_all(filter, true, false)?
-                .one()
-                .await
-                .ok()
-                .flatten();
-
-        // Update the new record with the attributes if possible, or return the new record without
-        // the attributes if not possible.
-        if let Some(moved_object) = moved_object {
-            Ok(event.with_attributes(moved_object.attributes))
-        } else {
-            warn!(
-                "Ingester Warning for {} in {}: Object with ingest_id {} not found in database",
-                event.key, event.bucket, ingest_id
-            );
-            Ok(event)
-        }
+        // From here, the new record must be a valid, moved object. Its attributes are carried over
+        // from the existing record, which is looked up in a single batched query.
+        Ok((event.with_ingest_id(Some(ingest_id)), Some(ingest_id)))
     }
 
     /// Updates events that are crawls to take into account the existing database state.
@@ -556,22 +534,57 @@ impl<'a> Collecter<'a> {
         crawl_bucket: Option<String>,
         crawl_prefix: Option<String>,
     ) -> Result<FlatS3EventMessages> {
-        let events = FlatS3EventMessages(
-            join_all(events.into_inner().into_iter().map(|event| async move {
+        let concurrency = config.crawl_concurrency().get();
+
+        // Fetch the S3 head and tagging for each object concurrently.
+        let events = stream::iter(events.into_inner())
+            .map(|event| async move {
                 // No need to run this unnecessarily on removed events.
                 match event.event_type {
-                    EventType::Deleted | EventType::Other => return Ok(event),
+                    EventType::Deleted | EventType::Other => return Ok((event, None)),
                     _ => {}
                 };
 
                 trace!(key = ?event.key, bucket = ?event.bucket, "updating event");
 
                 let event = Self::head(client, event).await;
-                Self::tagging(config, client, database_client, event).await
-            }))
-            .await
-            .into_iter()
-            .collect::<Result<Vec<FlatS3EventMessage>>>()?,
+                Self::tagging(config, client, event).await
+            })
+            .buffered(concurrency)
+            .try_collect::<Vec<(FlatS3EventMessage, Option<Uuid>)>>()
+            .await?;
+
+        // Look up the attributes of all moved objects in a single query.
+        let attributes = Self::moved_object_attributes(
+            database_client,
+            events
+                .iter()
+                .filter_map(|(_, ingest_id)| *ingest_id)
+                .collect(),
+        )
+        .await?;
+
+        // Carry the looked-up attributes over to each moved object in memory.
+        let events = FlatS3EventMessages(
+            events
+                .into_iter()
+                .map(|(event, ingest_id)| {
+                    let Some(ingest_id) = ingest_id else {
+                        return event;
+                    };
+
+                    match attributes.get(&ingest_id) {
+                        Some(attributes) => event.with_attributes(attributes.clone()),
+                        None => {
+                            warn!(
+                                "Ingester Warning for {} in {}: Object with ingest_id {} not found in database",
+                                event.key, event.bucket, ingest_id
+                            );
+                            event
+                        }
+                    }
+                })
+                .collect(),
         );
 
         if let Some(crawl_bucket) = crawl_bucket {
@@ -579,6 +592,37 @@ impl<'a> Collecter<'a> {
         } else {
             Ok(events)
         }
+    }
+
+    /// Look up the attributes of moved objects from the database in a single batched query.
+    async fn moved_object_attributes(
+        database_client: &database::Client,
+        ingest_ids: Vec<Uuid>,
+    ) -> Result<HashMap<Uuid, Option<Json>>> {
+        if ingest_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        // Deduplicate so the query does not contain redundant conditions.
+        let ingest_ids = ingest_ids.into_iter().collect::<HashSet<_>>();
+        let filter = S3ObjectsFilter {
+            ingest_id: ingest_ids.into_iter().collect_vec().into(),
+            ..Default::default()
+        };
+        let moved_objects =
+            ListQueryBuilder::<_, s3_object::Entity>::new(database_client.connection_ref())
+                .filter_all(filter, true, false)?
+                .all()
+                .await?;
+
+        let mut attributes = HashMap::with_capacity(moved_objects.len());
+        for object in moved_objects {
+            if let Some(ingest_id) = object.ingest_id {
+                attributes.entry(ingest_id).or_insert(object.attributes);
+            }
+        }
+
+        Ok(attributes)
     }
 
     /// Get the number of records processed.
@@ -890,6 +934,166 @@ pub(crate) mod tests {
             s3_object_results[1].get::<Option<Json>, _>("attributes"),
             Some(expected_attributes)
         );
+    }
+
+    #[sqlx::test(migrator = "MIGRATOR")]
+    async fn tagging_with_move_distinct_ingest_ids(pool: PgPool) {
+        let config = Default::default();
+        let client = Client::from_pool(pool.clone());
+        let mut collecter = test_collecter(&config, &client).await;
+
+        let entries = EntriesBuilder::default()
+            .with_n(3)
+            .build(&client)
+            .await
+            .unwrap();
+        let ingest_id_0 = entries.s3_objects[0].ingest_id.unwrap();
+        let attributes_0 = entries.s3_objects[0].attributes.clone();
+        let ingest_id_2 = entries.s3_objects[2].ingest_id.unwrap();
+        let attributes_2 = entries.s3_objects[2].attributes.clone();
+        assert_ne!(ingest_id_0, ingest_id_2);
+        assert_ne!(attributes_0, attributes_2);
+
+        // Two incoming moved objects, each tagged with a different ingest id.
+        collecter.raw_events = FlatS3EventMessages(vec![
+            expected_s3_event_message().with_version_id(default_version_id()),
+            expected_s3_event_message()
+                .with_key("key1".to_string())
+                .with_version_id(default_version_id()),
+        ]);
+        collecter.client = mock_s3(&[
+            head_expectation(
+                "key".to_string(),
+                default_version_id(),
+                expected_head_object(),
+            ),
+            head_expectation(
+                "key1".to_string(),
+                default_version_id(),
+                expected_head_object(),
+            ),
+            get_tagging_expectation(
+                "key".to_string(),
+                default_version_id(),
+                expected_get_object_tagging(Some(ingest_id_0)),
+            ),
+            get_tagging_expectation(
+                "key1".to_string(),
+                default_version_id(),
+                expected_get_object_tagging(Some(ingest_id_2)),
+            ),
+        ]);
+
+        let result = collecter.collect().await.unwrap();
+        let EventSourceType::S3(events) = &result.event_type else {
+            panic!();
+        };
+
+        let by_key: HashMap<String, (Option<Uuid>, Option<Json>)> = events
+            .keys
+            .iter()
+            .cloned()
+            .zip(
+                events
+                    .ingest_ids
+                    .iter()
+                    .cloned()
+                    .zip(events.attributes.iter().cloned()),
+            )
+            .collect();
+
+        assert_eq!(by_key["key"], (Some(ingest_id_0), attributes_0));
+        assert_eq!(by_key["key1"], (Some(ingest_id_2), attributes_2));
+    }
+
+    #[sqlx::test(migrator = "MIGRATOR")]
+    async fn tagging_with_move_not_in_database(pool: PgPool) {
+        let config = Default::default();
+        let client = Client::from_pool(pool.clone());
+        let mut collecter = test_collecter(&config, &client).await;
+
+        // A valid ingest_id tag that does not correspond to any database record.
+        let ingest_id = UuidGenerator::generate();
+
+        collecter.raw_events = FlatS3EventMessages(vec![
+            expected_s3_event_message().with_version_id(default_version_id()),
+        ]);
+        collecter.client = mock_s3(&[
+            head_expectation(
+                "key".to_string(),
+                default_version_id(),
+                expected_head_object(),
+            ),
+            get_tagging_expectation(
+                "key".to_string(),
+                default_version_id(),
+                expected_get_object_tagging(Some(ingest_id)),
+            ),
+        ]);
+
+        let result = collecter.collect().await.unwrap();
+        let EventSourceType::S3(events) = &result.event_type else {
+            panic!();
+        };
+
+        // The ingest_id from the tag is still applied, but since there is no matching database.
+        assert_eq!(events.ingest_ids[0], Some(ingest_id));
+        assert_eq!(events.attributes[0], None);
+    }
+
+    #[sqlx::test(migrator = "MIGRATOR")]
+    async fn tagging_with_move_shared_ingest_id(pool: PgPool) {
+        let config = Default::default();
+        let client = Client::from_pool(pool.clone());
+        let mut collecter = test_collecter(&config, &client).await;
+
+        // A single database record whose ingest_id is shared by two objects.
+        let ingest_id = UuidGenerator::generate();
+        let entries = EntriesBuilder::default()
+            .with_ingest_id(ingest_id)
+            .with_n(1)
+            .build(&client)
+            .await
+            .unwrap();
+        let attributes = entries.s3_objects[0].attributes.clone();
+
+        collecter.raw_events = FlatS3EventMessages(vec![
+            expected_s3_event_message().with_version_id(default_version_id()),
+            expected_s3_event_message()
+                .with_key("key1".to_string())
+                .with_version_id(default_version_id()),
+        ]);
+        collecter.client = mock_s3(&[
+            head_expectation(
+                "key".to_string(),
+                default_version_id(),
+                expected_head_object(),
+            ),
+            head_expectation(
+                "key1".to_string(),
+                default_version_id(),
+                expected_head_object(),
+            ),
+            get_tagging_expectation(
+                "key".to_string(),
+                default_version_id(),
+                expected_get_object_tagging(Some(ingest_id)),
+            ),
+            get_tagging_expectation(
+                "key1".to_string(),
+                default_version_id(),
+                expected_get_object_tagging(Some(ingest_id)),
+            ),
+        ]);
+
+        let result = collecter.collect().await.unwrap();
+        let EventSourceType::S3(events) = &result.event_type else {
+            panic!();
+        };
+
+        // Both incoming objects share the same ingest_id.
+        assert_eq!(events.ingest_ids, vec![Some(ingest_id), Some(ingest_id)]);
+        assert_eq!(events.attributes, vec![attributes.clone(), attributes]);
     }
 
     #[sqlx::test(migrator = "MIGRATOR")]

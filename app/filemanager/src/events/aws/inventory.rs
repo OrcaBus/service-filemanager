@@ -10,7 +10,7 @@ use aws_sdk_s3::types::InventoryFormat;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use csv::{ReaderBuilder, StringRecord, Trim};
 use flate2::read::MultiGzDecoder;
-use futures::future::join_all;
+use futures::stream::{self, StreamExt};
 use futures::{Stream, TryStreamExt};
 use orc_rust::ArrowReaderBuilder;
 use orc_rust::error::OrcError;
@@ -20,10 +20,12 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::from_slice;
 use serde_with::{DisplayFromStr, serde_as};
 use std::io::{BufReader, Cursor, Read};
+use std::num::NonZeroUsize;
 use std::result;
 
 use crate::clients::aws::s3::Client;
 use crate::database::entities::sea_orm_active_enums::Reason;
+use crate::env::DEFAULT_CRAWL_CONCURRENCY;
 use crate::error::Error::S3Error;
 use crate::error::{Error, Result};
 use crate::events::aws::message::{EventType::Created, default_version_id, quote_e_tag};
@@ -37,12 +39,22 @@ const DEFAULT_CSV_MANIFEST: &str =
 #[derive(Debug)]
 pub struct Inventory {
     client: Client,
+    concurrency: NonZeroUsize,
 }
 
 impl Inventory {
     /// Create a new inventory.
     pub fn new(client: Client) -> Self {
-        Self { client }
+        Self {
+            client,
+            concurrency: DEFAULT_CRAWL_CONCURRENCY,
+        }
+    }
+
+    /// Set the maximum number of manifest files fetched concurrently.
+    pub fn with_concurrency(mut self, concurrency: NonZeroUsize) -> Self {
+        self.concurrency = concurrency;
+        self
     }
 
     /// Create a new inventory with a default s3 client.
@@ -250,7 +262,8 @@ impl Inventory {
         };
 
         // TODO: consider streaming a file and reading records without placing them into memory first.
-        let inventories = join_all(manifest.files.iter().map(|file| async {
+        let concurrency = self.concurrency.get();
+        let inventories = stream::iter(manifest.files.iter().map(|file| async {
             let body = self.get_object_bytes(&file.key, &bucket).await?;
 
             if let Some(checksum) = &file.md5_checksum {
@@ -260,9 +273,9 @@ impl Inventory {
             self.records_from_format(&manifest.file_format, body, manifest.file_schema.as_deref())
                 .await
         }))
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>>>()?
+        .buffered(concurrency)
+        .try_collect::<Vec<_>>()
+        .await?
         .into_iter()
         .flatten()
         .collect();

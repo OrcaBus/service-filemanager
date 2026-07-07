@@ -13,6 +13,7 @@ use sea_orm::DbErr;
 use serde::{Deserialize, Serialize};
 use serde_qs::axum::QsQueryRejection;
 use thiserror::Error;
+use tracing::error;
 use utoipa::{IntoResponses, ToSchema};
 
 use crate::error::Error;
@@ -145,6 +146,10 @@ impl Display for ErrorStatusCode {
 
 impl IntoResponse for ErrorStatusCode {
     fn into_response(self) -> Response {
+        if let ErrorStatusCode::InternalServerError(err) = &self {
+            error!("internal server error: {err}");
+        }
+
         let response = match self {
             ErrorStatusCode::BadRequest(err) => (StatusCode::BAD_REQUEST, extract::Json(err)),
             ErrorStatusCode::Conflict(err) => (StatusCode::CONFLICT, extract::Json(err)),

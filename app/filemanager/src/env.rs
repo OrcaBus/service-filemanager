@@ -8,6 +8,7 @@ use envy::from_env;
 use serde::de::Error;
 use serde::{Deserialize, Deserializer};
 use serde_with::serde_as;
+use std::num::{NonZeroU32, NonZeroUsize};
 use std::result;
 use std::str::FromStr;
 use url::Url;
@@ -53,10 +54,20 @@ pub struct Config {
     pub(crate) api_cors_allow_headers: Vec<String>,
     #[serde(rename = "filemanager_access_key_secret_id")]
     pub(crate) access_key_secret_id: Option<String>,
+    #[serde(rename = "filemanager_crawl_concurrency")]
+    pub(crate) crawl_concurrency: NonZeroUsize,
+    #[serde(rename = "filemanager_database_max_connections")]
+    pub(crate) database_max_connections: NonZeroU32,
 }
 
 /// Default presigned URL expiry time, 7 days.
 pub const DEFAULT_PRESIGN_EXPIRY: Duration = Duration::days(7);
+
+/// Default maximum number of objects processed concurrently.
+pub const DEFAULT_CRAWL_CONCURRENCY: NonZeroUsize = NonZeroUsize::new(50).unwrap();
+
+/// Default maximum number of database connections per Lambda execution environment.
+pub const DEFAULT_DATABASE_MAX_CONNECTIONS: NonZeroU32 = NonZeroU32::new(2).unwrap();
 
 fn parse_limit<'de, D>(deserializer: D) -> result::Result<Option<u64>, D::Error>
 where
@@ -103,6 +114,8 @@ impl Default for Config {
             ],
             api_cors_allow_headers: vec![AUTHORIZATION.to_string()],
             access_key_secret_id: None,
+            crawl_concurrency: DEFAULT_CRAWL_CONCURRENCY,
+            database_max_connections: DEFAULT_DATABASE_MAX_CONNECTIONS,
         }
     }
 }
@@ -204,6 +217,16 @@ impl Config {
         self.access_key_secret_id.as_deref()
     }
 
+    /// Get the maximum number of objects processed concurrently.
+    pub fn crawl_concurrency(&self) -> NonZeroUsize {
+        self.crawl_concurrency
+    }
+
+    /// Get the maximum number of database connections per Lambda execution environment.
+    pub fn database_max_connections(&self) -> NonZeroU32 {
+        self.database_max_connections
+    }
+
     /// Get the value from an optional, or else try and get a different value, unwrapping into a Result.
     pub fn value_or_else<T>(value: Option<T>, or_else: Option<T>) -> Result<T> {
         value
@@ -245,6 +268,8 @@ mod tests {
             ("FILEMANAGER_API_CORS_ALLOW_METHODS", "GET,POST"),
             ("FILEMANAGER_API_CORS_ALLOW_HEADERS", "Authorization,Accept"),
             ("FILEMANAGER_ACCESS_KEY_SECRET_ID", "id"),
+            ("FILEMANAGER_CRAWL_CONCURRENCY", "100"),
+            ("FILEMANAGER_DATABASE_MAX_CONNECTIONS", "10"),
         ]
         .into_iter()
         .map(|(key, value)| (key.to_string(), value.to_string()));
@@ -272,7 +297,9 @@ mod tests {
                 ]),
                 api_cors_allow_methods: vec!["GET".to_string(), "POST".to_string()],
                 api_cors_allow_headers: vec!["Authorization".to_string(), "Accept".to_string()],
-                access_key_secret_id: Some("id".to_string())
+                access_key_secret_id: Some("id".to_string()),
+                crawl_concurrency: NonZeroUsize::new(100).unwrap(),
+                database_max_connections: NonZeroU32::new(10).unwrap(),
             }
         )
     }
@@ -282,5 +309,20 @@ mod tests {
         let config: Config = from_iter(vec![]).unwrap();
 
         assert_eq!(config, Default::default());
+    }
+
+    #[test]
+    fn test_environment_zero_is_rejected() {
+        let data = vec![("FILEMANAGER_CRAWL_CONCURRENCY", "0")]
+            .into_iter()
+            .map(|(key, value)| (key.to_string(), value.to_string()));
+
+        assert!(from_iter::<_, Config>(data).is_err());
+
+        let data = vec![("FILEMANAGER_DATABASE_MAX_CONNECTIONS", "0")]
+            .into_iter()
+            .map(|(key, value)| (key.to_string(), value.to_string()));
+
+        assert!(from_iter::<_, Config>(data).is_err());
     }
 }

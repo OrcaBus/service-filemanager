@@ -17,6 +17,7 @@ on:
       - ready_for_review
     branches:
       - main
+  merge_group:
 
 permissions: read-all
 

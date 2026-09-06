@@ -52,6 +52,7 @@ export function applyIAMWildcardSuppression(stack: Stack) {
           'Resource::arn:aws:s3:::project-data-071784445872-ap-southeast-2/*',
           'Resource::arn:aws:s3:::project-data-980504796380-ap-southeast-2/*',
           'Resource::arn:aws:s3:::project-data-318095824099-ap-southeast-2-an/*',
+          'Resource::arn:aws:s3:::project-data-465105354675-ap-southeast-2/*',
         ],
       },
     ],

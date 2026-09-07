@@ -1,6 +1,12 @@
 import { SecretValue } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-import { AccessKey, AccessKeyStatus, PolicyStatement, User } from 'aws-cdk-lib/aws-iam';
+import {
+  AccessKey,
+  AccessKeyStatus,
+  ManagedPolicy,
+  PolicyStatement,
+  User,
+} from 'aws-cdk-lib/aws-iam';
 import { ISecret, Secret } from 'aws-cdk-lib/aws-secretsmanager';
 
 /**
@@ -35,7 +41,15 @@ export class AccessKeySecret extends Construct {
     const user = new User(this, 'User', {
       userName: props.userName,
     });
-    props.policies.forEach((policy) => user.addToPolicy(policy));
+
+    // Attach the policies as a customer policy rather than an inline one, as this has a higher
+    // IAM limit.
+    if (props.policies.length > 0) {
+      new ManagedPolicy(this, 'Policy', {
+        statements: props.policies,
+        users: [user],
+      });
+    }
 
     const accessKey = new AccessKey(this, 'AccessKey', {
       user,
